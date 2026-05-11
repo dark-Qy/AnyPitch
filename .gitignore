@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.gocache/
+.gomodcache/
+.playwright-cli/
+data/
+output/
+web/dist/
+web/node_modules/
+web/.vite/
+web/coverage/
