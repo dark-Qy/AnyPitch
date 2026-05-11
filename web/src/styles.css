@@ -618,6 +618,7 @@ p {
 }
 
 .day-cell {
+  position: relative;
   min-height: 98px;
   display: grid;
   align-content: start;
@@ -644,14 +645,21 @@ p {
 }
 
 .day-pick {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
-  min-height: 30px;
+  height: 100%;
+  min-height: 0;
   display: flex;
+  align-items: flex-start;
   justify-content: flex-start;
   border: 0;
-  padding: 0;
+  border-radius: 5px;
+  padding: 8px;
   color: inherit;
   background: transparent;
+  text-align: left;
 }
 
 .day-pick:hover,
@@ -687,11 +695,16 @@ p {
 }
 
 .day-events {
+  position: relative;
+  z-index: 2;
   display: grid;
   gap: 4px;
+  margin-top: 36px;
 }
 
 .event-chip {
+  position: relative;
+  z-index: 3;
   width: 100%;
   min-height: 0;
   display: block;

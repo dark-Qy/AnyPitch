@@ -876,7 +876,7 @@ function CalendarPanel({
                 }`}
                 key={day.key}
               >
-                <button className="day-pick" type="button" onClick={() => selectCalendarDate(day.key)}>
+                <button className="day-pick" type="button" onClick={() => selectCalendarDate(day.key)} aria-label={`选择 ${day.key}`}>
                   <span className="day-number">{day.dayOfMonth}</span>
                 </button>
                 <span className="day-events">
