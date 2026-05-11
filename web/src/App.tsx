@@ -507,10 +507,12 @@ function DraggableSlot({
 }
 
 function SlotMarkerContent({ slot, player }: { slot: TacticSlot; player?: Player }) {
+  const subLabel = player?.name ?? "";
+
   return (
     <>
       <span>{player?.number ?? slot.label}</span>
-      <small>{player?.name ?? slot.label}</small>
+      {subLabel ? <small>{subLabel}</small> : null}
     </>
   );
 }

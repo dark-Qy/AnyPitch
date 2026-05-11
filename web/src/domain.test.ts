@@ -82,7 +82,7 @@ describe("tactic helpers", () => {
   });
 
   it("selects a realistic vertical pitch ratio", () => {
-    expect(pitchGeometry(5)).toEqual({ ratio: "20 / 40", maxWidth: "460px" });
+    expect(pitchGeometry(5)).toEqual({ ratio: "68 / 105", maxWidth: "560px" });
     expect(pitchGeometry(11)).toEqual({ ratio: "68 / 105", maxWidth: "620px" });
   });
 });

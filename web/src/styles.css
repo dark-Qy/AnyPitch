@@ -448,16 +448,18 @@ p {
 .slot-marker {
   position: absolute;
   z-index: 2;
-  width: 70px;
-  min-height: 70px;
-  display: grid;
-  place-items: center;
-  gap: 2px;
+  width: 66px;
+  height: 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   border: 3px solid var(--ink);
-  border-radius: 8px;
+  border-radius: 999px;
   background: var(--panel);
   color: var(--ink);
-  box-shadow: 5px 5px 0 rgba(22, 21, 18, 0.3);
+  box-shadow: 4px 4px 0 rgba(22, 21, 18, 0.3);
   touch-action: none;
   padding: 6px;
   cursor: grab;
@@ -468,21 +470,21 @@ p {
 }
 
 .slot-marker.selected {
-  box-shadow: 5px 5px 0 var(--amber);
+  box-shadow: 4px 4px 0 var(--amber);
 }
 
 .slot-marker.opponent {
   background: #f3e4d0;
-  box-shadow: 5px 5px 0 rgba(177, 60, 46, 0.42);
+  box-shadow: 4px 4px 0 rgba(177, 60, 46, 0.42);
 }
 
 .slot-marker.opponent.selected {
-  box-shadow: 5px 5px 0 var(--danger);
+  box-shadow: 4px 4px 0 var(--danger);
 }
 
 .pitch.has-opponent .slot-marker {
-  width: 58px;
-  min-height: 58px;
+  width: 54px;
+  height: 54px;
   font-size: 12px;
 }
 
@@ -506,12 +508,15 @@ p {
 
 .slot-marker span {
   font-weight: 900;
+  line-height: 1.05;
 }
 
 .slot-marker small {
-  max-width: 56px;
+  max-width: 48px;
   overflow: hidden;
   color: var(--muted);
+  font-size: 11px;
+  line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -835,16 +840,16 @@ p {
   }
 
   .slot-marker {
-    width: 58px;
-    min-height: 58px;
+    width: 54px;
+    height: 54px;
     font-size: 12px;
   }
 
   .pitch.has-opponent .slot-marker {
-    width: 46px;
-    min-height: 46px;
+    width: 44px;
+    height: 44px;
     padding: 4px;
-    font-size: 11px;
+    font-size: 10px;
     box-shadow: 3px 3px 0 rgba(22, 21, 18, 0.3);
   }
 

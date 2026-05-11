@@ -85,7 +85,7 @@ export function homeSlotsFromTemplate<T extends TemplateLike>(template: T) {
 
 export function pitchGeometry(format: TacticFormat) {
   if (format === 5) {
-    return { ratio: "20 / 40", maxWidth: "460px" };
+    return { ratio: "68 / 105", maxWidth: "560px" };
   }
   return { ratio: "68 / 105", maxWidth: "620px" };
 }
