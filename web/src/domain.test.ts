@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attendanceSummary,
+  buildAttendanceStatusMap,
   buildMonthCalendar,
   groupEventsByDate,
   opponentSlotsFromTemplate,
@@ -19,6 +20,20 @@ describe("attendanceSummary", () => {
 
     expect(summary.ready).toBe(2);
     expect(summary.blocked).toBe(1);
+  });
+});
+
+describe("buildAttendanceStatusMap", () => {
+  it("fills every scheduled player and overlays saved records", () => {
+    const records = buildAttendanceStatusMap(
+      [
+        { id: "p1", name: "林海" },
+        { id: "p2", name: "周舟" },
+      ],
+      [{ player_id: "p2", status: "late", note: "", updated_at: "" }],
+    );
+
+    expect(records).toEqual({ p1: "unknown", p2: "late" });
   });
 });
 

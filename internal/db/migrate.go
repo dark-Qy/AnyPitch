@@ -41,11 +41,20 @@ func Migrate(conn *sql.DB) error {
 			type TEXT NOT NULL,
 			title TEXT NOT NULL,
 			starts_at TEXT NOT NULL,
+			ends_at TEXT NOT NULL DEFAULT '',
 			location TEXT NOT NULL,
 			opponent TEXT NOT NULL,
 			notes TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS event_locations (
+			id TEXT PRIMARY KEY,
+			team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(team_id, name)
 		)`,
 		`CREATE TABLE IF NOT EXISTS attendance_records (
 			event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -80,6 +89,7 @@ func Migrate(conn *sql.DB) error {
 		{"tactic_boards", "template_id", "TEXT NOT NULL DEFAULT ''"},
 		{"tactic_boards", "opponent_template_id", "TEXT NOT NULL DEFAULT ''"},
 		{"tactic_boards", "opponent_formation", "TEXT NOT NULL DEFAULT ''"},
+		{"events", "ends_at", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := ensureColumn(conn, column.table, column.name, column.definition); err != nil {
 			return err

@@ -37,6 +37,20 @@ export type CalendarDay = {
   isToday: boolean;
 };
 
+export function buildAttendanceStatusMap<T extends { id: string }>(
+  players: T[],
+  records: AttendanceRecord[],
+): Record<string, AttendanceStatus> {
+  const next: Record<string, AttendanceStatus> = {};
+  for (const player of players) {
+    next[player.id] = "unknown";
+  }
+  for (const record of records) {
+    next[record.player_id] = record.status;
+  }
+  return next;
+}
+
 export function attendanceSummary(records: AttendanceRecord[]) {
   return records.reduce(
     (summary, record) => {

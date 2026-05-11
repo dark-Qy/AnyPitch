@@ -58,6 +58,8 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	mux.Handle("/api/auth/me", handler.withAuth(handler.me))
 	mux.Handle("/api/players", handler.withAuth(handler.playersCollection))
 	mux.Handle("/api/players/", handler.withAuth(handler.playerDetail))
+	mux.Handle("/api/locations", handler.withAuth(handler.locationsCollection))
+	mux.Handle("/api/locations/", handler.withAuth(handler.locationDetail))
 	mux.Handle("/api/events", handler.withAuth(handler.eventsCollection))
 	mux.Handle("/api/events/", handler.withAuth(handler.eventNested))
 	mux.Handle("/api/tactics/templates", handler.withAuth(handler.tacticsTemplates))
@@ -232,10 +234,53 @@ func (h *Handler) eventsCollection(w http.ResponseWriter, r *http.Request, ctx r
 		}
 		created, err := h.events.Create(ctx.teamID, input)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_event", "Event type, title, and RFC3339 starts_at are required.")
+			writeError(w, http.StatusBadRequest, "invalid_event", "Event type, title, and RFC3339 starts_at are required; ends_at must be after starts_at when provided.")
 			return
 		}
 		writeSuccess(w, map[string]any{"event": created})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+	}
+}
+
+func (h *Handler) locationsCollection(w http.ResponseWriter, r *http.Request, ctx requestContext) {
+	switch r.Method {
+	case http.MethodGet:
+		locations, err := h.events.ListLocations(ctx.teamID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list locations.")
+			return
+		}
+		writeSuccess(w, map[string]any{"locations": locations})
+	case http.MethodPost:
+		var input teamevent.LocationInput
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+		location, err := h.events.CreateLocation(ctx.teamID, input)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_location", "Location name is required.")
+			return
+		}
+		writeSuccess(w, map[string]any{"location": location})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+	}
+}
+
+func (h *Handler) locationDetail(w http.ResponseWriter, r *http.Request, ctx requestContext) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/locations/")
+	if id == "" {
+		writeError(w, http.StatusNotFound, "not_found", "Location not found.")
+		return
+	}
+	switch r.Method {
+	case http.MethodDelete:
+		if err := h.events.DeleteLocation(ctx.teamID, id); err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to delete location.")
+			return
+		}
+		writeSuccess(w, map[string]any{"ok": true})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 	}
@@ -389,6 +434,11 @@ func (h *Handler) ensureDefaultTeam(userID string) (string, error) {
 	var teamID string
 	err := h.db.QueryRow(`SELECT id FROM teams WHERE user_id = ? ORDER BY created_at LIMIT 1`, userID).Scan(&teamID)
 	if err == nil {
+		if h.events != nil {
+			if err := h.events.EnsureDefaultLocation(teamID); err != nil {
+				return "", err
+			}
+		}
 		return teamID, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -406,6 +456,11 @@ func (h *Handler) ensureDefaultTeam(userID string) (string, error) {
 	)
 	if err != nil {
 		return "", err
+	}
+	if h.events != nil {
+		if err := h.events.EnsureDefaultLocation(teamID); err != nil {
+			return "", err
+		}
 	}
 	return teamID, nil
 }

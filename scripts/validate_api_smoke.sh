@@ -85,6 +85,13 @@ echo "==> auth me"
 api GET /api/auth/me "${TOKEN}" "" "${SMOKE_DIR}/me.json"
 [[ "$(json_get "${SMOKE_DIR}/me.json" data.user.email)" == "coach@anypitch.local" ]]
 
+echo "==> locations"
+api GET /api/locations "${TOKEN}" "" "${SMOKE_DIR}/locations.json"
+[[ "$(json_get "${SMOKE_DIR}/locations.json" data.locations.0.name)" == "北京邮电大学（海淀校区）" ]]
+api POST /api/locations "${TOKEN}" '{"name":"北京邮电大学（沙河校区）"}' "${SMOKE_DIR}/location.json"
+LOCATION_ID="$(json_get "${SMOKE_DIR}/location.json" data.location.id)"
+[[ -n "${LOCATION_ID}" ]]
+
 echo "==> create player"
 api POST /api/players "${TOKEN}" '{"name":"林海","number":10,"positions":["前腰","前锋"]}' "${SMOKE_DIR}/player.json"
 PLAYER_ID="$(json_get "${SMOKE_DIR}/player.json" data.player.id)"
@@ -92,12 +99,13 @@ PLAYER_ID="$(json_get "${SMOKE_DIR}/player.json" data.player.id)"
 [[ "$(json_get "${SMOKE_DIR}/player.json" data.player.positions.0)" == "前腰" ]]
 
 echo "==> create training"
-api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练","starts_at":"2026-05-13T20:00:00+08:00","location":"东区球场","opponent":"","notes":"小场压迫"}' "${SMOKE_DIR}/training.json"
+api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练","starts_at":"2026-05-13T20:00:00+08:00","ends_at":"2026-05-13T22:00:00+08:00","location":"北京邮电大学（海淀校区）","opponent":"","notes":"小场压迫"}' "${SMOKE_DIR}/training.json"
 EVENT_ID="$(json_get "${SMOKE_DIR}/training.json" data.event.id)"
 [[ -n "${EVENT_ID}" ]]
+[[ "$(json_get "${SMOKE_DIR}/training.json" data.event.ends_at)" == "2026-05-13T22:00:00+08:00" ]]
 
 echo "==> create friendly"
-api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","starts_at":"2026-05-16T18:00:00+08:00","location":"西区球场","opponent":"Blue FC","notes":"八人制"}' "${SMOKE_DIR}/friendly.json"
+api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","starts_at":"2026-05-16T18:00:00+08:00","ends_at":"2026-05-16T20:00:00+08:00","location":"北京邮电大学（沙河校区）","opponent":"Blue FC","notes":"八人制"}' "${SMOKE_DIR}/friendly.json"
 [[ "$(json_get "${SMOKE_DIR}/friendly.json" data.event.type)" == "friendly" ]]
 
 echo "==> attendance"

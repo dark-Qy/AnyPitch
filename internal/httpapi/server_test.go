@@ -44,6 +44,20 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 		t.Fatal("expected default team id")
 	}
 
+	locations := performJSONRequest(t, handler, http.MethodGet, "/api/locations", token, nil)
+	assertStatus(t, locations, http.StatusOK)
+	assertJSONEquals(t, locations, "data.locations.0.name", "北京邮电大学（海淀校区）")
+
+	location := performJSONRequest(t, handler, http.MethodPost, "/api/locations", token, map[string]any{
+		"name": "北京邮电大学（沙河校区）",
+	})
+	assertStatus(t, location, http.StatusOK)
+	locationID := jsonPath(t, location, "data.location.id").(string)
+	assertJSONEquals(t, location, "data.location.name", "北京邮电大学（沙河校区）")
+
+	deleteLocation := performJSONRequest(t, handler, http.MethodDelete, "/api/locations/"+locationID, token, nil)
+	assertStatus(t, deleteLocation, http.StatusOK)
+
 	player := performJSONRequest(t, handler, http.MethodPost, "/api/players", token, map[string]any{
 		"name":      "林海",
 		"number":    10,
@@ -57,12 +71,13 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 		"type":      "training",
 		"title":     "周三控球训练",
 		"starts_at": "2026-05-13T20:00:00+08:00",
-		"location":  "东区球场",
 		"opponent":  "",
 		"notes":     "小场压迫与转移",
 	})
 	assertStatus(t, training, http.StatusOK)
 	eventID := jsonPath(t, training, "data.event.id").(string)
+	assertJSONEquals(t, training, "data.event.ends_at", "2026-05-13T22:00:00+08:00")
+	assertJSONEquals(t, training, "data.event.location", "北京邮电大学（海淀校区）")
 
 	attendance := performJSONRequest(t, handler, http.MethodPut, "/api/events/"+eventID+"/attendance", token, map[string]any{
 		"records": []map[string]any{

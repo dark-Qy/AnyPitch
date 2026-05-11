@@ -27,9 +27,17 @@ export type TeamEvent = {
   type: "training" | "friendly";
   title: string;
   starts_at: string;
+  ends_at: string;
   location: string;
   opponent: string;
   notes: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EventLocation = {
+  id: string;
+  name: string;
   created_at: string;
   updated_at: string;
 };
@@ -109,10 +117,26 @@ export class APIClient {
     return this.request<{ events: TeamEvent[] }>("/api/events");
   }
 
+  listLocations() {
+    return this.request<{ locations: EventLocation[] }>("/api/locations");
+  }
+
+  createLocation(input: { name: string }) {
+    return this.request<{ location: EventLocation }>("/api/locations", {
+      method: "POST",
+      body: input,
+    });
+  }
+
+  deleteLocation(locationID: string) {
+    return this.request<{ ok: boolean }>(`/api/locations/${locationID}`, { method: "DELETE" });
+  }
+
   createEvent(input: {
     type: "training" | "friendly";
     title: string;
     starts_at: string;
+    ends_at: string;
     location: string;
     opponent: string;
     notes: string;

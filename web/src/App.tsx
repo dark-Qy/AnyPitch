@@ -19,11 +19,13 @@ import {
   Plus,
   Save,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
 import { type CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   APIClient,
+  EventLocation,
   Player,
   TacticBoard,
   TacticSlot,
@@ -35,6 +37,7 @@ import {
   AttendanceRecord,
   AttendanceStatus,
   attendanceSummary,
+  buildAttendanceStatusMap,
   buildMonthCalendar,
   groupEventsByDate,
   homeSlotsFromTemplate,
@@ -47,6 +50,7 @@ import {
 } from "./domain";
 
 const tokenKey = "anypitch_token";
+const defaultLocationName = "北京邮电大学（海淀校区）";
 const attendanceOptions: AttendanceStatus[] = [
   "unknown",
   "available",
@@ -57,6 +61,16 @@ const attendanceOptions: AttendanceStatus[] = [
   "absent",
   "excused",
 ];
+const attendanceLabels: Record<AttendanceStatus, string> = {
+  unknown: "未确认",
+  available: "可参加",
+  unavailable: "不可参加",
+  late: "迟到",
+  injured: "伤病",
+  present: "已到场",
+  absent: "缺席",
+  excused: "请假",
+};
 
 type View = "tactics" | "players" | "calendar" | "attendance";
 
@@ -67,6 +81,7 @@ export function App() {
   const [view, setView] = useState<View>("tactics");
   const [players, setPlayers] = useState<Player[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
+  const [locations, setLocations] = useState<EventLocation[]>([]);
   const [templates, setTemplates] = useState<TacticTemplate[]>([]);
   const [boards, setBoards] = useState<TacticBoard[]>([]);
   const [error, setError] = useState("");
@@ -83,16 +98,18 @@ export function App() {
     setBusy(true);
     setError("");
     try {
-      const [me, playerResult, eventResult, templateResult, boardResult] = await Promise.all([
+      const [me, playerResult, eventResult, locationResult, templateResult, boardResult] = await Promise.all([
         client.me(),
         client.listPlayers(),
         client.listEvents(),
+        client.listLocations(),
         client.templates(),
         client.listBoards(),
       ]);
       setUser(me.user);
       setPlayers(playerResult.players);
       setEvents(eventResult.events);
+      setLocations(locationResult.locations);
       setTemplates(templateResult.templates);
       setBoards(boardResult.boards);
     } catch (err) {
@@ -164,7 +181,15 @@ export function App() {
           <PlayersPanel client={client} players={players} onPlayersChanged={setPlayers} onError={setError} />
         ) : null}
         {view === "calendar" ? (
-          <CalendarPanel client={client} events={events} onEventsChanged={setEvents} onError={setError} />
+          <CalendarPanel
+            client={client}
+            events={events}
+            locations={locations}
+            players={players}
+            onEventsChanged={setEvents}
+            onLocationsChanged={setLocations}
+            onError={setError}
+          />
         ) : null}
         {view === "attendance" ? (
           <AttendancePanel client={client} events={events} players={players} onError={setError} />
@@ -591,12 +616,18 @@ function PlayersPanel({
 function CalendarPanel({
   client,
   events,
+  locations,
+  players,
   onEventsChanged,
+  onLocationsChanged,
   onError,
 }: {
   client: APIClient;
   events: TeamEvent[];
+  locations: EventLocation[];
+  players: Player[];
   onEventsChanged: (events: TeamEvent[]) => void;
+  onLocationsChanged: (locations: EventLocation[]) => void;
   onError: (message: string) => void;
 }) {
   const today = useMemo(() => new Date(), []);
@@ -605,25 +636,63 @@ function CalendarPanel({
   const [type, setType] = useState<"training" | "friendly">("training");
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [startsAt, setStartsAt] = useState(`${todayKey}T20:00`);
-  const [location, setLocation] = useState("东区球场");
+  const [endsAt, setEndsAt] = useState(`${todayKey}T22:00`);
+  const [location, setLocation] = useState(defaultLocationName);
+  const [newLocation, setNewLocation] = useState("");
+  const [selectedEventID, setSelectedEventID] = useState("");
+  const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  const selectedEvent = events.find((event) => event.id === selectedEventID);
+  const summary = useMemo(
+    () =>
+      attendanceSummary(
+        Object.entries(records).map(([playerID, status]) => ({
+          player_id: playerID,
+          status,
+          note: "",
+          updated_at: "",
+        })),
+      ),
+    [records],
+  );
   const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
+
+  useEffect(() => {
+    if (locations.length > 0 && !locations.some((next) => next.name === location)) {
+      setLocation(locations[0].name);
+    }
+  }, [locations, location]);
+
+  useEffect(() => {
+    if (selectedEventID && !events.some((event) => event.id === selectedEventID)) {
+      setSelectedEventID("");
+    }
+  }, [events, selectedEventID]);
+
+  useEffect(() => {
+    if (selectedEventID) {
+      void loadEventAttendance(selectedEventID);
+    }
+  }, [selectedEventID, players]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     try {
       const iso = new Date(startsAt).toISOString();
+      const endISO = new Date(endsAt).toISOString();
       const result = await client.createEvent({
         type,
         title,
         starts_at: iso,
+        ends_at: endISO,
         location,
         opponent: type === "friendly" ? "待定对手" : "",
         notes: "",
       });
       onEventsChanged([...events, result.event].sort((left, right) => left.starts_at.localeCompare(right.starts_at)));
+      setSelectedEventID(result.event.id);
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -637,17 +706,93 @@ function CalendarPanel({
   function selectCalendarDate(dayKey: string) {
     setSelectedDate(dayKey);
     setStartsAt(`${dayKey}T20:00`);
+    setEndsAt(`${dayKey}T22:00`);
     const next = parseDateKey(dayKey);
     setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
   }
 
   function changeStartsAt(value: string) {
     setStartsAt(value);
+    if (endsAt <= value) {
+      setEndsAt(addHoursToLocalInput(value, 2));
+    }
     const nextDate = value.slice(0, 10);
     if (nextDate) {
       setSelectedDate(nextDate);
       const next = parseDateKey(nextDate);
       setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+    }
+  }
+
+  function selectCalendarEvent(event: TeamEvent) {
+    const dayKey = toLocalDateKey(event.starts_at);
+    setSelectedDate(dayKey);
+    setStartsAt(`${dayKey}T20:00`);
+    setEndsAt(`${dayKey}T22:00`);
+    setSelectedEventID(event.id);
+    const next = parseDateKey(dayKey);
+    setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  }
+
+  async function loadEventAttendance(eventID: string) {
+    try {
+      const result = await client.listAttendance(eventID);
+      setRecords(buildAttendanceStatusMap(players, result.records));
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  async function saveEventAttendance() {
+    if (!selectedEventID) {
+      return;
+    }
+    try {
+      await client.saveAttendance(
+        selectedEventID,
+        players.map((player) => ({
+          player_id: player.id,
+          status: records[player.id] ?? "unknown",
+          note: "",
+        })),
+      );
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  async function addLocation() {
+    const name = newLocation.trim();
+    if (!name) {
+      return;
+    }
+    try {
+      const result = await client.createLocation({ name });
+      const next = [...locations.filter((item) => item.id !== result.location.id), result.location];
+      onLocationsChanged(next);
+      setLocation(result.location.name);
+      setNewLocation("");
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  async function deleteSelectedLocation() {
+    const selected = locations.find((item) => item.name === location);
+    if (!selected || selected.name === defaultLocationName) {
+      return;
+    }
+    try {
+      await client.deleteLocation(selected.id);
+      const next = locations.filter((item) => item.id !== selected.id);
+      onLocationsChanged(next);
+      setLocation(next[0]?.name ?? defaultLocationName);
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
     }
   }
 
@@ -669,13 +814,38 @@ function CalendarPanel({
           <input value={title} onChange={(event) => setTitle(event.target.value)} />
         </label>
         <label>
-          时间
+          开始时间
           <input value={startsAt} onChange={(event) => changeStartsAt(event.target.value)} type="datetime-local" />
         </label>
         <label>
-          地点
-          <input value={location} onChange={(event) => setLocation(event.target.value)} />
+          结束时间
+          <input value={endsAt} onChange={(event) => setEndsAt(event.target.value)} type="datetime-local" />
         </label>
+        <label>
+          地点
+          <select value={location} onChange={(event) => setLocation(event.target.value)}>
+            {(locations.length > 0 ? locations : [{ id: "default", name: defaultLocationName } as EventLocation]).map((item) => (
+              <option value={item.name} key={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="location-manager">
+          <input value={newLocation} onChange={(event) => setNewLocation(event.target.value)} placeholder="新增地点" />
+          <button className="ghost-button icon-button" type="button" onClick={addLocation} aria-label="新增地点">
+            <Plus size={17} />
+          </button>
+          <button
+            className="ghost-button icon-button"
+            type="button"
+            onClick={deleteSelectedLocation}
+            disabled={!locations.some((item) => item.name === location && item.name !== defaultLocationName)}
+            aria-label="删除当前地点"
+          >
+            <Trash2 size={17} />
+          </button>
+        </div>
         <button className="primary-button" type="submit">
           <Plus size={18} />
           添加到 {selectedDate.slice(5)}
@@ -700,28 +870,84 @@ function CalendarPanel({
           {monthDays.map((day) => {
             const dayEvents = eventsByDate[day.key] ?? [];
             return (
-              <button
+              <div
                 className={`day-cell ${day.inCurrentMonth ? "" : "muted"} ${day.key === selectedDate ? "selected" : ""} ${
                   day.isToday ? "today" : ""
                 }`}
-                type="button"
                 key={day.key}
-                onClick={() => selectCalendarDate(day.key)}
               >
-                <span className="day-number">{day.dayOfMonth}</span>
+                <button className="day-pick" type="button" onClick={() => selectCalendarDate(day.key)}>
+                  <span className="day-number">{day.dayOfMonth}</span>
+                </button>
                 <span className="day-events">
                   {dayEvents.slice(0, 2).map((event) => (
-                    <small className={`event-chip ${event.type}`} key={event.id}>
+                    <button
+                      className={`event-chip ${event.type} ${selectedEventID === event.id ? "active" : ""}`}
+                      type="button"
+                      key={event.id}
+                      onClick={() => selectCalendarEvent(event)}
+                    >
                       {event.type === "training" ? "训" : "赛"} {event.title}
-                    </small>
+                    </button>
                   ))}
                   {dayEvents.length > 2 ? <small className="event-chip more">+{dayEvents.length - 2}</small> : null}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
         {events.length === 0 ? <div className="empty-state">点击日期，新增第一条训练或友谊赛</div> : null}
+        <div className="event-detail-panel">
+          {selectedEvent ? (
+            <>
+              <div className="event-detail-head">
+                <div>
+                  <strong>{selectedEvent.title}</strong>
+                  <small>
+                    {formatDateRange(selectedEvent.starts_at, selectedEvent.ends_at)} · {selectedEvent.location}
+                  </small>
+                </div>
+                <span className={`event-type ${selectedEvent.type}`}>{selectedEvent.type === "training" ? "训练" : "友谊赛"}</span>
+              </div>
+              <div className="summary-box">
+                <span>可用 {summary.ready}</span>
+                <span>不可用 {summary.blocked}</span>
+              </div>
+              <div className="inline-attendance-list">
+                {players.map((player) => (
+                  <article className="attendance-row compact" key={player.id}>
+                    <div>
+                      <strong>{player.name}</strong>
+                      <small>{player.positions.join(" / ") || "未设置位置"}</small>
+                    </div>
+                    <select
+                      value={records[player.id] ?? "unknown"}
+                      onChange={(event) =>
+                        setRecords((current) => ({
+                          ...current,
+                          [player.id]: event.target.value as AttendanceStatus,
+                        }))
+                      }
+                    >
+                      {attendanceOptions.map((option) => (
+                        <option value={option} key={option}>
+                          {attendanceLabels[option]}
+                        </option>
+                      ))}
+                    </select>
+                  </article>
+                ))}
+              </div>
+              <button className="primary-button" type="button" onClick={saveEventAttendance}>
+                <Save size={18} />
+                保存本日程出勤
+              </button>
+              {players.length === 0 ? <div className="empty-state">先添加队员，再管理这个日程的出勤</div> : null}
+            </>
+          ) : (
+            <div className="empty-state">点击月历中的具体日程，直接管理队员出勤</div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -763,14 +989,7 @@ function AttendancePanel({
   async function loadAttendance(nextEventID: string) {
     try {
       const result = await client.listAttendance(nextEventID);
-      const next: Record<string, AttendanceStatus> = {};
-      for (const player of players) {
-        next[player.id] = "unknown";
-      }
-      for (const record of result.records) {
-        next[record.player_id] = record.status;
-      }
-      setRecords(next);
+      setRecords(buildAttendanceStatusMap(players, result.records));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -844,7 +1063,7 @@ function AttendancePanel({
             >
               {attendanceOptions.map((option) => (
                 <option value={option} key={option}>
-                  {option}
+                  {attendanceLabels[option]}
                 </option>
               ))}
             </select>
@@ -878,7 +1097,32 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatDateRange(startValue: string, endValue: string) {
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+  const date = new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+  }).format(start);
+  const time = new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${date} ${time.format(start)}-${time.format(end)}`;
+}
+
 function parseDateKey(dateKey: string) {
   const [year, month, day] = dateKey.split("-").map(Number);
   return new Date(year, month - 1, day);
+}
+
+function addHoursToLocalInput(value: string, hours: number) {
+  const date = new Date(value);
+  date.setHours(date.getHours() + hours);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
 }

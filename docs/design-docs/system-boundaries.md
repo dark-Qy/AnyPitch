@@ -8,7 +8,7 @@ Go 服务在启动时迁移 SQLite schema，并通过 `internal/httpapi` 暴露�
 
 ## Frontend
 
-React/Vite 工作台使用同一套 Web 代码适配桌面和手机屏幕。战术板使用 dnd-kit 拖拽站位，按赛制过滤模板，并把我方/对手 slots JSON 写回后端。
+React/Vite 工作台使用同一套 Web 代码适配桌面和手机屏幕。日程月历支持点击具体日程进入详情并直接维护出勤，地点通过下拉和轻量管理控件维护。战术板使用 dnd-kit 拖拽站位，按赛制过滤模板，并把我方/对手 slots JSON 写回后端。
 
 ## Out Of Scope
 

@@ -562,6 +562,12 @@ p {
   gap: 12px;
 }
 
+.location-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px 44px;
+  gap: 8px;
+}
+
 .calendar-toolbar {
   display: grid;
   grid-template-columns: 44px 1fr 44px;
@@ -605,6 +611,23 @@ p {
   text-align: left;
 }
 
+.day-pick {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  justify-content: flex-start;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.day-pick:hover,
+.day-pick:focus-visible {
+  box-shadow: none;
+  transform: none;
+}
+
 .day-cell.muted {
   color: rgba(22, 21, 18, 0.46);
   background: rgba(225, 212, 187, 0.35);
@@ -634,6 +657,9 @@ p {
 }
 
 .event-chip {
+  width: 100%;
+  min-height: 0;
+  display: block;
   overflow: hidden;
   border: 1px solid var(--ink);
   border-radius: 5px;
@@ -642,6 +668,17 @@ p {
   background: var(--signal-green);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+button.event-chip:hover,
+button.event-chip:focus-visible {
+  box-shadow: 2px 2px 0 var(--amber);
+  transform: none;
+}
+
+.event-chip.active {
+  outline: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--signal-green);
 }
 
 .event-chip.friendly {
@@ -718,6 +755,37 @@ p {
   background: var(--amber);
 }
 
+.event-detail-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 2px solid var(--line-soft);
+  padding-top: 14px;
+}
+
+.event-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event-detail-head strong,
+.event-detail-head small {
+  display: block;
+}
+
+.event-detail-head small {
+  color: var(--muted);
+  font-family: "SFMono-Regular", "Cascadia Mono", monospace;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.inline-attendance-list {
+  display: grid;
+  gap: 8px;
+}
+
 .summary-box {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -734,6 +802,10 @@ p {
 
 .attendance-row {
   justify-content: space-between;
+}
+
+.attendance-row.compact {
+  margin-bottom: 0;
 }
 
 .attendance-row select {

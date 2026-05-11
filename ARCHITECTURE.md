@@ -7,10 +7,10 @@
 ## Stable Layers
 
 - 服务入口层：`cmd/server/` 负责启动、读取 `APP_DB_PATH` / `HTTP_ADDR` 并装配 HTTP handler
-- SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`teams`、`players`、`events`、`attendance_records`、`tactic_boards`
+- SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`teams`、`players`、`events`、`event_locations`、`attendance_records`、`tactic_boards`
 - 鉴权层：`internal/auth/` 负责默认教练初始化、登录、session 创建、Bearer token 校验和登出
 - 队员层：`internal/player/` 负责队员 CRUD 和位置标签归一化
-- 日程层：`internal/event/` 负责 `training` / `friendly` 日程
+- 日程层：`internal/event/` 负责 `training` / `friendly` 日程、开始/结束时间段和常用地点
 - 出勤层：`internal/attendance/` 负责事件维度的队员出勤状态
 - 战术层：`internal/tactics/` 负责 5/8/11 人制多模板、稳定模板 ID、我方/对手站位 slots 和战术板保存
 - HTTP 边界层：`internal/httpapi/` 负责 API envelope、路由、JSON 输入输出和用户隔离
@@ -29,3 +29,9 @@
 - `TacticTemplate.id` 是稳定模板标识，前端用它处理赛制/模板联动
 - `TacticSlot.side` 可为 `home` 或 `opponent`，旧数据缺省时按 `home` 处理
 - `tactic_boards` 持久化 `template_id`、`opponent_template_id` 和 `opponent_formation`，用于复原双方站位上下文
+
+## Event Schema
+
+- `events.starts_at` 和 `events.ends_at` 共同表达训练或友谊赛时间段，旧数据缺少结束时间时按开始后两小时兜底
+- `events.location` 未填写时使用 `北京邮电大学（海淀校区）`
+- `event_locations` 保存当前 team 的常用地点，启动时确保默认地点存在
