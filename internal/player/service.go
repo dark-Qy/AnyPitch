@@ -189,7 +189,7 @@ func cleanPositions(raw []string) []string {
 	cleaned := []string{}
 	seen := map[string]bool{}
 	for _, value := range raw {
-		position := strings.ToUpper(strings.TrimSpace(value))
+		position := strings.TrimSpace(value)
 		if position == "" || seen[position] {
 			continue
 		}

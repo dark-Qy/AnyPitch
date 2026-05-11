@@ -8,7 +8,7 @@
 
 - 服务入口层：`cmd/server/` 负责启动、读取 `APP_DB_PATH` / `HTTP_ADDR` 并装配 HTTP handler
 - SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`teams`、`players`、`events`、`attendance_records`、`tactic_boards`
-- 鉴权层：`internal/auth/` 负责教练注册、登录、session 创建、Bearer token 校验和登出
+- 鉴权层：`internal/auth/` 负责默认教练初始化、登录、session 创建、Bearer token 校验和登出
 - 队员层：`internal/player/` 负责队员 CRUD 和位置标签归一化
 - 日程层：`internal/event/` 负责 `training` / `friendly` 日程
 - 出勤层：`internal/attendance/` 负责事件维度的队员出勤状态

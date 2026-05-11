@@ -1,7 +1,18 @@
-import { DndContext, type DragEndEvent, useDraggable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  type DragEndEvent,
+  type DragStartEvent,
+  useDraggable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   LayoutDashboard,
   LogOut,
@@ -20,7 +31,15 @@ import {
   TeamEvent,
   User,
 } from "./api";
-import { AttendanceRecord, AttendanceStatus, attendanceSummary, normalizeSlotPosition } from "./domain";
+import {
+  AttendanceRecord,
+  AttendanceStatus,
+  attendanceSummary,
+  buildMonthCalendar,
+  groupEventsByDate,
+  normalizeSlotPosition,
+  toLocalDateKey,
+} from "./domain";
 
 const tokenKey = "anypitch_token";
 const attendanceOptions: AttendanceStatus[] = [
@@ -161,9 +180,8 @@ function AuthGateway({
   error: string;
   onAuthenticated: (token: string, user: User) => void;
 }) {
-  const [mode, setMode] = useState<"login" | "register">("register");
-  const [email, setEmail] = useState("coach@example.com");
-  const [password, setPassword] = useState("correct horse battery staple");
+  const [email, setEmail] = useState("coach@anypitch.local");
+  const [password, setPassword] = useState("AnyPitch@2026");
   const [localError, setLocalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -172,7 +190,7 @@ function AuthGateway({
     setSubmitting(true);
     setLocalError("");
     try {
-      const session = mode === "register" ? await client.register(email, password) : await client.login(email, password);
+      const session = await client.login(email, password);
       onAuthenticated(session.token, session.user);
     } catch (err) {
       setLocalError(messageFromError(err));
@@ -187,16 +205,12 @@ function AuthGateway({
         <div className="auth-brand">
           <div className="brand-mark large">AP</div>
           <p>AnyPitch</p>
-          <h1>把每一次训练和战术部署落到可执行的队伍管理里</h1>
+          <h1>单队教练工作台</h1>
         </div>
         <form className="auth-form" onSubmit={submit}>
-          <div className="mode-switch" role="tablist" aria-label="认证方式">
-            <button type="button" className={mode === "register" ? "active" : ""} onClick={() => setMode("register")}>
-              注册
-            </button>
-            <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
-              登录
-            </button>
+          <div className="login-note">
+            <strong>默认教练账号</strong>
+            <span>coach@anypitch.local / AnyPitch@2026</span>
           </div>
           <label>
             邮箱
@@ -209,7 +223,7 @@ function AuthGateway({
           {localError || error ? <div className="error-banner compact">{localError || error}</div> : null}
           <button className="primary-button" disabled={submitting || busy} type="submit">
             <ShieldCheck size={18} />
-            {mode === "register" ? "创建教练工作台" : "进入教练工作台"}
+            登录
           </button>
         </form>
       </section>
@@ -238,7 +252,15 @@ function TacticsPanel({
   const [boardName, setBoardName] = useState("五人制高位压迫");
   const [slots, setSlots] = useState<TacticSlot[]>([]);
   const [selectedSlotID, setSelectedSlotID] = useState<string>("");
+  const [activeDragID, setActiveDragID] = useState<string>("");
   const fieldRef = useRef<HTMLDivElement | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor),
+  );
+  const activeDragSlot = slots.find((slot) => slot.slot_id === activeDragID);
 
   useEffect(() => {
     if (activeTemplate) {
@@ -266,24 +288,33 @@ function TacticsPanel({
     }
   }
 
+  function onDragStart(event: DragStartEvent) {
+    const slotID = String(event.active.id);
+    setActiveDragID(slotID);
+    setSelectedSlotID(slotID);
+  }
+
   function onDragEnd(event: DragEndEvent) {
     const field = fieldRef.current;
-    if (!field) {
+    const translated = event.active.rect.current.translated;
+    if (!field || !translated) {
+      setActiveDragID("");
       return;
     }
     const rect = field.getBoundingClientRect();
+    const next = normalizeSlotPosition({
+      x: ((translated.left + translated.width / 2 - rect.left) / rect.width) * 100,
+      y: ((translated.top + translated.height / 2 - rect.top) / rect.height) * 100,
+    });
     setSlots((current) =>
       current.map((slot) => {
         if (slot.slot_id !== event.active.id) {
           return slot;
         }
-        const next = normalizeSlotPosition({
-          x: slot.x + (event.delta.x / rect.width) * 100,
-          y: slot.y + (event.delta.y / rect.height) * 100,
-        });
         return { ...slot, ...next };
       }),
     );
+    setActiveDragID("");
   }
 
   function assignSelectedSlot(playerID: string) {
@@ -343,7 +374,7 @@ function TacticsPanel({
           ))}
         </div>
       </div>
-      <DndContext onDragEnd={onDragEnd}>
+      <DndContext sensors={sensors} autoScroll={false} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveDragID("")}>
         <div className="pitch-shell">
           <div className="pitch" ref={fieldRef}>
             <div className="pitch-line center-line" />
@@ -355,12 +386,20 @@ function TacticsPanel({
                 key={slot.slot_id}
                 slot={slot}
                 selected={selectedSlotID === slot.slot_id}
+                dragging={activeDragID === slot.slot_id}
                 player={players.find((player) => player.id === slot.player_id)}
                 onSelect={() => setSelectedSlotID(slot.slot_id)}
               />
             ))}
           </div>
         </div>
+        <DragOverlay dropAnimation={{ duration: 120, easing: "ease-out" }}>
+          {activeDragSlot ? (
+            <div className="slot-marker drag-overlay">
+              <SlotMarkerContent slot={activeDragSlot} player={players.find((player) => player.id === activeDragSlot.player_id)} />
+            </div>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </section>
   );
@@ -369,33 +408,42 @@ function TacticsPanel({
 function DraggableSlot({
   slot,
   selected,
+  dragging,
   player,
   onSelect,
 }: {
   slot: TacticSlot;
   selected: boolean;
+  dragging: boolean;
   player?: Player;
   onSelect: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: slot.slot_id });
-  const dragTransform = transform ? CSS.Translate.toString(transform) : "";
+  const { attributes, listeners, setNodeRef } = useDraggable({ id: slot.slot_id });
   return (
     <button
       ref={setNodeRef}
-      className={`slot-marker ${selected ? "selected" : ""}`}
+      className={`slot-marker ${selected ? "selected" : ""} ${dragging ? "dragging" : ""}`}
       style={{
         left: `${slot.x}%`,
         top: `${slot.y}%`,
-        transform: `translate(-50%, -50%) ${dragTransform}`,
+        transform: "translate(-50%, -50%)",
       }}
       type="button"
       onClick={onSelect}
       {...listeners}
       {...attributes}
     >
+      <SlotMarkerContent slot={slot} player={player} />
+    </button>
+  );
+}
+
+function SlotMarkerContent({ slot, player }: { slot: TacticSlot; player?: Player }) {
+  return (
+    <>
       <span>{player?.number ?? slot.label}</span>
       <small>{player?.name ?? slot.label}</small>
-    </button>
+    </>
   );
 }
 
@@ -412,7 +460,7 @@ function PlayersPanel({
 }) {
   const [name, setName] = useState("");
   const [number, setNumber] = useState("");
-  const [positions, setPositions] = useState("FW, AM");
+  const [positions, setPositions] = useState("前锋, 前腰");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -481,10 +529,17 @@ function CalendarPanel({
   onEventsChanged: (events: TeamEvent[]) => void;
   onError: (message: string) => void;
 }) {
+  const today = useMemo(() => new Date(), []);
+  const todayKey = toLocalDateKey(today);
   const [title, setTitle] = useState("周三控球训练");
   const [type, setType] = useState<"training" | "friendly">("training");
-  const [startsAt, setStartsAt] = useState("2026-05-13T20:00");
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [startsAt, setStartsAt] = useState(`${todayKey}T20:00`);
   const [location, setLocation] = useState("东区球场");
+  const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
+  const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -498,10 +553,31 @@ function CalendarPanel({
         opponent: type === "friendly" ? "待定对手" : "",
         notes: "",
       });
-      onEventsChanged([...events, result.event]);
+      onEventsChanged([...events, result.event].sort((left, right) => left.starts_at.localeCompare(right.starts_at)));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
+    }
+  }
+
+  function shiftMonth(delta: number) {
+    setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  }
+
+  function selectCalendarDate(dayKey: string) {
+    setSelectedDate(dayKey);
+    setStartsAt(`${dayKey}T20:00`);
+    const next = parseDateKey(dayKey);
+    setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  }
+
+  function changeStartsAt(value: string) {
+    setStartsAt(value);
+    const nextDate = value.slice(0, 10);
+    if (nextDate) {
+      setSelectedDate(nextDate);
+      const next = parseDateKey(nextDate);
+      setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
     }
   }
 
@@ -524,7 +600,7 @@ function CalendarPanel({
         </label>
         <label>
           时间
-          <input value={startsAt} onChange={(event) => setStartsAt(event.target.value)} type="datetime-local" />
+          <input value={startsAt} onChange={(event) => changeStartsAt(event.target.value)} type="datetime-local" />
         </label>
         <label>
           地点
@@ -532,22 +608,50 @@ function CalendarPanel({
         </label>
         <button className="primary-button" type="submit">
           <Plus size={18} />
-          添加日程
+          添加到 {selectedDate.slice(5)}
         </button>
       </form>
-      <div className="data-panel timeline">
-        {events.map((event) => (
-          <article className="event-row" key={event.id}>
-            <span className={`event-type ${event.type}`}>{event.type === "training" ? "训练" : "友谊赛"}</span>
-            <div>
-              <strong>{event.title}</strong>
-              <small>
-                {formatDate(event.starts_at)} · {event.location || "未设置地点"}
-              </small>
-            </div>
-          </article>
-        ))}
-        {events.length === 0 ? <div className="empty-state">还没有训练或友谊赛</div> : null}
+      <div className="data-panel calendar-board">
+        <div className="calendar-toolbar">
+          <button className="ghost-button icon-button" type="button" onClick={() => shiftMonth(-1)} aria-label="上个月">
+            <ChevronLeft size={18} />
+          </button>
+          <strong>{monthLabel}</strong>
+          <button className="ghost-button icon-button" type="button" onClick={() => shiftMonth(1)} aria-label="下个月">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+        <div className="weekday-row" aria-hidden="true">
+          {["一", "二", "三", "四", "五", "六", "日"].map((weekday) => (
+            <span key={weekday}>{weekday}</span>
+          ))}
+        </div>
+        <div className="month-grid">
+          {monthDays.map((day) => {
+            const dayEvents = eventsByDate[day.key] ?? [];
+            return (
+              <button
+                className={`day-cell ${day.inCurrentMonth ? "" : "muted"} ${day.key === selectedDate ? "selected" : ""} ${
+                  day.isToday ? "today" : ""
+                }`}
+                type="button"
+                key={day.key}
+                onClick={() => selectCalendarDate(day.key)}
+              >
+                <span className="day-number">{day.dayOfMonth}</span>
+                <span className="day-events">
+                  {dayEvents.slice(0, 2).map((event) => (
+                    <small className={`event-chip ${event.type}`} key={event.id}>
+                      {event.type === "training" ? "训" : "赛"} {event.title}
+                    </small>
+                  ))}
+                  {dayEvents.length > 2 ? <small className="event-chip more">+{dayEvents.length - 2}</small> : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {events.length === 0 ? <div className="empty-state">点击日期，新增第一条训练或友谊赛</div> : null}
       </div>
     </section>
   );
@@ -702,4 +806,9 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function parseDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }

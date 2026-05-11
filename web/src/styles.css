@@ -203,6 +203,21 @@ p {
   padding: 18px;
 }
 
+.login-note {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: rgba(24, 160, 108, 0.08);
+}
+
+.login-note span {
+  color: var(--muted);
+  font-family: "SFMono-Regular", "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
 .mode-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -427,10 +442,33 @@ p {
   box-shadow: 5px 5px 0 rgba(22, 21, 18, 0.3);
   touch-action: none;
   padding: 6px;
+  cursor: grab;
+  transition:
+    box-shadow 140ms ease,
+    opacity 140ms ease,
+    background 140ms ease;
 }
 
 .slot-marker.selected {
   box-shadow: 5px 5px 0 var(--amber);
+}
+
+.slot-marker.dragging {
+  opacity: 0.42;
+  cursor: grabbing;
+}
+
+.slot-marker.drag-overlay {
+  position: static;
+  opacity: 0.96;
+  transform: none;
+  cursor: grabbing;
+  pointer-events: none;
+}
+
+.slot-marker:hover,
+.slot-marker:focus-visible {
+  background: #fffdf8;
 }
 
 .slot-marker span {
@@ -459,6 +497,103 @@ p {
   border-radius: 8px;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.calendar-board {
+  display: grid;
+  gap: 12px;
+}
+
+.calendar-toolbar {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.calendar-toolbar strong {
+  text-align: center;
+  font-size: 18px;
+}
+
+.icon-button {
+  min-width: 0;
+  width: 44px;
+  padding: 0;
+}
+
+.weekday-row,
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.weekday-row span {
+  color: var(--muted);
+  font-family: "SFMono-Regular", "Cascadia Mono", monospace;
+  font-size: 12px;
+  text-align: center;
+}
+
+.day-cell {
+  min-height: 98px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 8px;
+  color: var(--ink);
+  background: rgba(255, 250, 240, 0.7);
+  text-align: left;
+}
+
+.day-cell.muted {
+  color: rgba(22, 21, 18, 0.46);
+  background: rgba(225, 212, 187, 0.35);
+}
+
+.day-cell.selected {
+  box-shadow: 4px 4px 0 var(--signal-green);
+}
+
+.day-cell.today .day-number {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.day-number {
+  width: 30px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  font-weight: 900;
+}
+
+.day-events {
+  display: grid;
+  gap: 4px;
+}
+
+.event-chip {
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  padding: 3px 5px;
+  color: var(--paper);
+  background: var(--signal-green);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-chip.friendly {
+  color: var(--ink);
+  background: var(--amber);
+}
+
+.event-chip.more {
+  color: var(--ink);
+  background: var(--paper-deep);
 }
 
 .saved-board,
@@ -629,6 +764,21 @@ p {
   .data-panel,
   .pitch-shell {
     padding: 14px;
+  }
+
+  .weekday-row,
+  .month-grid {
+    gap: 4px;
+  }
+
+  .day-cell {
+    min-height: 82px;
+    padding: 6px;
+  }
+
+  .event-chip {
+    max-width: 100%;
+    font-size: 10px;
   }
 
   .pitch {

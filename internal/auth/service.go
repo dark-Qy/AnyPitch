@@ -15,7 +15,11 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrUnauthorized       = errors.New("unauthorized")
-	ErrEmailExists        = errors.New("email already exists")
+)
+
+const (
+	DefaultCoachEmail    = "coach@anypitch.local"
+	DefaultCoachPassword = "AnyPitch@2026"
 )
 
 type User struct {
@@ -38,19 +42,23 @@ func NewService(db *sql.DB) *Service {
 	return &Service{db: db}
 }
 
-func (s *Service) Register(email, password string) (Session, error) {
-	email = normalizeEmail(email)
-	if email == "" || len(password) < 8 {
-		return Session{}, ErrInvalidCredentials
+func (s *Service) EnsureDefaultCoach() (User, error) {
+	email := normalizeEmail(DefaultCoachEmail)
+	user, err := s.userByEmail(email)
+	if err == nil {
+		return user, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return User{}, err
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(DefaultCoachPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return Session{}, err
+		return User{}, err
 	}
 
 	now := nowISO()
-	user := User{
+	user = User{
 		ID:        uuid.NewString(),
 		Email:     email,
 		Status:    "active",
@@ -66,21 +74,16 @@ func (s *Service) Register(email, password string) (Session, error) {
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			return Session{}, ErrEmailExists
+			return s.userByEmail(email)
 		}
-		return Session{}, err
+		return User{}, err
 	}
-	return s.createSession(user)
+	return user, nil
 }
 
 func (s *Service) Login(email, password string) (Session, error) {
 	email = normalizeEmail(email)
-	var user User
-	var passwordHash string
-	err := s.db.QueryRow(
-		`SELECT id, email, password_hash, status, created_at FROM users WHERE email = ?`,
-		email,
-	).Scan(&user.ID, &user.Email, &passwordHash, &user.Status, &user.CreatedAt)
+	user, passwordHash, err := s.userWithPasswordByEmail(email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, ErrInvalidCredentials
 	}
@@ -91,6 +94,25 @@ func (s *Service) Login(email, password string) (Session, error) {
 		return Session{}, ErrInvalidCredentials
 	}
 	return s.createSession(user)
+}
+
+func (s *Service) userByEmail(email string) (User, error) {
+	var user User
+	err := s.db.QueryRow(
+		`SELECT id, email, status, created_at FROM users WHERE email = ?`,
+		email,
+	).Scan(&user.ID, &user.Email, &user.Status, &user.CreatedAt)
+	return user, err
+}
+
+func (s *Service) userWithPasswordByEmail(email string) (User, string, error) {
+	var user User
+	var passwordHash string
+	err := s.db.QueryRow(
+		`SELECT id, email, password_hash, status, created_at FROM users WHERE email = ?`,
+		email,
+	).Scan(&user.ID, &user.Email, &passwordHash, &user.Status, &user.CreatedAt)
+	return user, passwordHash, err
 }
 
 func (s *Service) UserByToken(token string) (User, error) {

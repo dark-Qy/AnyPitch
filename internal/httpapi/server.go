@@ -34,18 +34,25 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	if err := db.Migrate(conn); err != nil {
 		return nil, err
 	}
+	authService := auth.NewService(conn)
 	handler := &Handler{
-		auth:       auth.NewService(conn),
+		auth:       authService,
 		players:    player.NewService(conn),
 		events:     teamevent.NewService(conn),
 		attendance: attendance.NewService(conn),
 		tactics:    tactics.NewService(conn),
 		db:         conn,
 	}
+	defaultCoach, err := handler.auth.EnsureDefaultCoach()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := handler.ensureDefaultTeam(defaultCoach.ID); err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", publicHealth)
 	mux.HandleFunc("/api/healthz", apiHealth)
-	mux.HandleFunc("/api/auth/register", handler.register)
 	mux.HandleFunc("/api/auth/login", handler.login)
 	mux.Handle("/api/auth/logout", handler.withAuth(handler.logout))
 	mux.Handle("/api/auth/me", handler.withAuth(handler.me))
@@ -109,30 +116,6 @@ func shouldServeSPA(requestPath string) bool {
 func fileExists(name string) bool {
 	info, err := os.Stat(name)
 	return err == nil && !info.IsDir()
-}
-
-func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
-		return
-	}
-	var input struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	session, err := h.auth.Register(input.Email, input.Password)
-	if err != nil {
-		handleAuthError(w, err)
-		return
-	}
-	if _, err := h.ensureDefaultTeam(session.User.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to prepare team workspace.")
-		return
-	}
-	writeSuccess(w, session)
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
@@ -447,8 +430,6 @@ func handleAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		writeError(w, http.StatusBadRequest, "invalid_credentials", "Email or password is invalid.")
-	case errors.Is(err, auth.ErrEmailExists):
-		writeError(w, http.StatusConflict, "email_exists", "Email is already registered.")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "Authentication failed.")
 	}

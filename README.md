@@ -31,6 +31,11 @@ npm --prefix web run dev
 - 后端：`http://127.0.0.1:8080`
 - 前端：`http://127.0.0.1:5173`
 
+默认教练账号：
+
+- 邮箱：`coach@anypitch.local`
+- 密码：`AnyPitch@2026`
+
 ## 验证
 
 ```bash

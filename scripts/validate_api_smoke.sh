@@ -76,19 +76,20 @@ echo "==> health"
 api GET /api/healthz "" "" "${SMOKE_DIR}/health.json"
 [[ "$(json_get "${SMOKE_DIR}/health.json" data.ok)" == "true" ]]
 
-echo "==> register"
-api POST /api/auth/register "" '{"email":"smoke@example.com","password":"correct horse battery staple"}' "${SMOKE_DIR}/register.json"
-TOKEN="$(json_get "${SMOKE_DIR}/register.json" data.token)"
+echo "==> login"
+api POST /api/auth/login "" '{"email":"coach@anypitch.local","password":"AnyPitch@2026"}' "${SMOKE_DIR}/login.json"
+TOKEN="$(json_get "${SMOKE_DIR}/login.json" data.token)"
 [[ -n "${TOKEN}" ]]
 
 echo "==> auth me"
 api GET /api/auth/me "${TOKEN}" "" "${SMOKE_DIR}/me.json"
-[[ "$(json_get "${SMOKE_DIR}/me.json" data.user.email)" == "smoke@example.com" ]]
+[[ "$(json_get "${SMOKE_DIR}/me.json" data.user.email)" == "coach@anypitch.local" ]]
 
 echo "==> create player"
-api POST /api/players "${TOKEN}" '{"name":"林海","number":10,"positions":["AM","FW"]}' "${SMOKE_DIR}/player.json"
+api POST /api/players "${TOKEN}" '{"name":"林海","number":10,"positions":["前腰","前锋"]}' "${SMOKE_DIR}/player.json"
 PLAYER_ID="$(json_get "${SMOKE_DIR}/player.json" data.player.id)"
 [[ -n "${PLAYER_ID}" ]]
+[[ "$(json_get "${SMOKE_DIR}/player.json" data.player.positions.0)" == "前腰" ]]
 
 echo "==> create training"
 api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练","starts_at":"2026-05-13T20:00:00+08:00","location":"东区球场","opponent":"","notes":"小场压迫"}' "${SMOKE_DIR}/training.json"
@@ -106,11 +107,12 @@ api PUT "/api/events/${EVENT_ID}/attendance" "${TOKEN}" "{\"records\":[{\"player
 echo "==> tactic templates"
 api GET /api/tactics/templates "${TOKEN}" "" "${SMOKE_DIR}/templates.json"
 [[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.0.format)" == "5" ]]
+[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.0.slots.0.label)" == "门将" ]]
 [[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.1.format)" == "8" ]]
 [[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.2.format)" == "11" ]]
 
 echo "==> tactic board"
-api POST /api/tactics/boards "${TOKEN}" "{\"name\":\"五人制高位压迫\",\"format\":5,\"formation\":\"1-2-1\",\"slots\":[{\"slot_id\":\"gk\",\"label\":\"GK\",\"x\":50,\"y\":91,\"player_id\":\"${PLAYER_ID}\"}]}" "${SMOKE_DIR}/board.json"
+api POST /api/tactics/boards "${TOKEN}" "{\"name\":\"五人制高位压迫\",\"format\":5,\"formation\":\"1-2-1\",\"slots\":[{\"slot_id\":\"gk\",\"label\":\"门将\",\"x\":50,\"y\":91,\"player_id\":\"${PLAYER_ID}\"}]}" "${SMOKE_DIR}/board.json"
 [[ "$(json_get "${SMOKE_DIR}/board.json" data.board.format)" == "5" ]]
 
 echo "==> logout"

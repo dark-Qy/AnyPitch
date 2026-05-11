@@ -20,6 +20,14 @@ export type SlotPosition = {
   y: number;
 };
 
+export type CalendarDay = {
+  key: string;
+  date: Date;
+  dayOfMonth: number;
+  inCurrentMonth: boolean;
+  isToday: boolean;
+};
+
 export function attendanceSummary(records: AttendanceRecord[]) {
   return records.reduce(
     (summary, record) => {
@@ -42,6 +50,42 @@ export function normalizeSlotPosition(position: SlotPosition): SlotPosition {
   };
 }
 
+export function buildMonthCalendar(year: number, month: number, today = new Date()): CalendarDay[] {
+  const firstOfMonth = new Date(year, month, 1);
+  const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - mondayOffset);
+  const todayKey = toLocalDateKey(today);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
+    const key = toLocalDateKey(date);
+    return {
+      key,
+      date,
+      dayOfMonth: date.getDate(),
+      inCurrentMonth: date.getMonth() === month,
+      isToday: key === todayKey,
+    };
+  });
+}
+
+export function groupEventsByDate<T extends { starts_at: string }>(events: T[]): Record<string, T[]> {
+  return events.reduce<Record<string, T[]>>((grouped, event) => {
+    const key = toLocalDateKey(event.starts_at);
+    grouped[key] = grouped[key] ?? [];
+    grouped[key].push(event);
+    return grouped;
+  }, {});
+}
+
+export function toLocalDateKey(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function clamp(value: number) {
-  return Math.max(0, Math.min(100, Math.round(value * 10) / 10));
+  return Math.max(4, Math.min(96, Math.round(value * 10) / 10));
 }

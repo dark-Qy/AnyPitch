@@ -21,27 +21,37 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 	assertStatus(t, health, http.StatusOK)
 	assertJSONEquals(t, health, "data.ok", true)
 
-	register := performJSONRequest(t, handler, http.MethodPost, "/api/auth/register", "", map[string]any{
-		"email":    "coach@example.com",
-		"password": "correct horse battery staple",
+	registerAttempt := performJSONRequest(t, handler, http.MethodPost, "/api/auth/register", "", map[string]any{
+		"email":    "someone@example.com",
+		"password": "SomePassword2026",
 	})
-	assertStatus(t, register, http.StatusOK)
-	token := jsonPath(t, register, "data.token").(string)
+	assertStatus(t, registerAttempt, http.StatusNotFound)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"email":    "coach@anypitch.local",
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	token := jsonPath(t, login, "data.token").(string)
 	if token == "" {
-		t.Fatal("expected register token")
+		t.Fatal("expected login token")
 	}
 
 	me := performJSONRequest(t, handler, http.MethodGet, "/api/auth/me", token, nil)
 	assertStatus(t, me, http.StatusOK)
-	assertJSONEquals(t, me, "data.user.email", "coach@example.com")
+	assertJSONEquals(t, me, "data.user.email", "coach@anypitch.local")
+	if jsonPath(t, me, "data.team_id").(string) == "" {
+		t.Fatal("expected default team id")
+	}
 
 	player := performJSONRequest(t, handler, http.MethodPost, "/api/players", token, map[string]any{
 		"name":      "林海",
 		"number":    10,
-		"positions": []string{"AM", "FW"},
+		"positions": []string{"前腰", "前锋"},
 	})
 	assertStatus(t, player, http.StatusOK)
 	playerID := jsonPath(t, player, "data.player.id").(string)
+	assertJSONEquals(t, player, "data.player.positions.0", "前腰")
 
 	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", token, map[string]any{
 		"type":      "training",
@@ -65,6 +75,7 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 	templates := performJSONRequest(t, handler, http.MethodGet, "/api/tactics/templates", token, nil)
 	assertStatus(t, templates, http.StatusOK)
 	assertJSONEquals(t, templates, "data.templates.0.format", float64(5))
+	assertJSONEquals(t, templates, "data.templates.0.slots.0.label", "门将")
 	assertJSONEquals(t, templates, "data.templates.1.format", float64(8))
 	assertJSONEquals(t, templates, "data.templates.2.format", float64(11))
 
@@ -73,7 +84,7 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 		"format":    5,
 		"formation": "1-2-1",
 		"slots": []map[string]any{
-			{"slot_id": "gk", "label": "GK", "x": 50, "y": 91, "player_id": playerID},
+			{"slot_id": "gk", "label": "门将", "x": 50, "y": 91, "player_id": playerID},
 		},
 	})
 	assertStatus(t, board, http.StatusOK)

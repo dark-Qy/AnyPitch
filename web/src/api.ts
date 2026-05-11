@@ -74,13 +74,6 @@ export class APIClient {
     this.token = token;
   }
 
-  register(email: string, password: string) {
-    return this.request<Session>("/api/auth/register", {
-      method: "POST",
-      body: { email, password },
-    });
-  }
-
   login(email: string, password: string) {
     return this.request<Session>("/api/auth/login", {
       method: "POST",
