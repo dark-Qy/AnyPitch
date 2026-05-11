@@ -72,5 +72,54 @@ func Migrate(conn *sql.DB) error {
 			return err
 		}
 	}
+	for _, column := range []struct {
+		table      string
+		name       string
+		definition string
+	}{
+		{"tactic_boards", "template_id", "TEXT NOT NULL DEFAULT ''"},
+		{"tactic_boards", "opponent_template_id", "TEXT NOT NULL DEFAULT ''"},
+		{"tactic_boards", "opponent_formation", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		if err := ensureColumn(conn, column.table, column.name, column.definition); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func ensureColumn(conn *sql.DB, table, name, definition string) error {
+	exists, err := columnExists(conn, table, name)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	_, err = conn.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + name + ` ` + definition)
+	return err
+}
+
+func columnExists(conn *sql.DB, table, name string) (bool, error) {
+	rows, err := conn.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var columnName string
+		var columnType string
+		var notNull int
+		var defaultValue any
+		var primaryKey int
+		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, err
+		}
+		if columnName == name {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }

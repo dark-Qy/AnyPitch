@@ -12,7 +12,7 @@
 - 队员层：`internal/player/` 负责队员 CRUD 和位置标签归一化
 - 日程层：`internal/event/` 负责 `training` / `friendly` 日程
 - 出勤层：`internal/attendance/` 负责事件维度的队员出勤状态
-- 战术层：`internal/tactics/` 负责 5/8/11 人制模板、站位 slots 和战术板保存
+- 战术层：`internal/tactics/` 负责 5/8/11 人制多模板、稳定模板 ID、我方/对手站位 slots 和战术板保存
 - HTTP 边界层：`internal/httpapi/` 负责 API envelope、路由、JSON 输入输出和用户隔离
 - 前端层：`web/` 负责 React/Vite 响应式工作台和战术板拖拽 UI
 
@@ -23,3 +23,9 @@
 - 第一版数据隔离以登录教练的默认 team 为边界
 - 手机端是响应式 Web，不引入 PWA、service worker 或原生壳
 - 新增公共字段或 schema 变更需同步 README、ARCHITECTURE、FRONTEND、相关 product spec 和 CHANGELOG
+
+## Tactics Board Schema
+
+- `TacticTemplate.id` 是稳定模板标识，前端用它处理赛制/模板联动
+- `TacticSlot.side` 可为 `home` 或 `opponent`，旧数据缺省时按 `home` 处理
+- `tactic_boards` 持久化 `template_id`、`opponent_template_id` 和 `opponent_formation`，用于复原双方站位上下文

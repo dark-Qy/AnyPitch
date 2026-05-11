@@ -106,14 +106,18 @@ api PUT "/api/events/${EVENT_ID}/attendance" "${TOKEN}" "{\"records\":[{\"player
 
 echo "==> tactic templates"
 api GET /api/tactics/templates "${TOKEN}" "" "${SMOKE_DIR}/templates.json"
+[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.0.id)" == "f5-121-press" ]]
 [[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.0.format)" == "5" ]]
 [[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.0.slots.0.label)" == "门将" ]]
-[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.1.format)" == "8" ]]
-[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.2.format)" == "11" ]]
+[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.1.format)" == "5" ]]
+[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.2.format)" == "8" ]]
+[[ "$(json_get "${SMOKE_DIR}/templates.json" data.templates.4.format)" == "11" ]]
 
 echo "==> tactic board"
-api POST /api/tactics/boards "${TOKEN}" "{\"name\":\"五人制高位压迫\",\"format\":5,\"formation\":\"1-2-1\",\"slots\":[{\"slot_id\":\"gk\",\"label\":\"门将\",\"x\":50,\"y\":91,\"player_id\":\"${PLAYER_ID}\"}]}" "${SMOKE_DIR}/board.json"
+api POST /api/tactics/boards "${TOKEN}" "{\"name\":\"五人制高位压迫\",\"template_id\":\"f5-121-press\",\"opponent_template_id\":\"f5-211-counter\",\"format\":5,\"formation\":\"1-2-1\",\"opponent_formation\":\"2-1-1\",\"slots\":[{\"slot_id\":\"home:gk\",\"label\":\"门将\",\"x\":50,\"y\":91,\"player_id\":\"${PLAYER_ID}\"},{\"slot_id\":\"opponent:gk\",\"label\":\"门将\",\"side\":\"opponent\",\"x\":50,\"y\":9,\"player_id\":\"\"}]}" "${SMOKE_DIR}/board.json"
 [[ "$(json_get "${SMOKE_DIR}/board.json" data.board.format)" == "5" ]]
+[[ "$(json_get "${SMOKE_DIR}/board.json" data.board.template_id)" == "f5-121-press" ]]
+[[ "$(json_get "${SMOKE_DIR}/board.json" data.board.slots.1.side)" == "opponent" ]]
 
 echo "==> logout"
 api POST /api/auth/logout "${TOKEN}" "" "${SMOKE_DIR}/logout.json"

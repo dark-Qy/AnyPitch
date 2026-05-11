@@ -37,12 +37,14 @@ export type TeamEvent = {
 export type TacticSlot = {
   slot_id: string;
   label: string;
+  side?: "home" | "opponent";
   x: number;
   y: number;
   player_id: string;
 };
 
 export type TacticTemplate = {
+  id: string;
   format: 5 | 8 | 11;
   name: string;
   formation: string;
@@ -52,8 +54,11 @@ export type TacticTemplate = {
 export type TacticBoard = {
   id: string;
   name: string;
+  template_id?: string;
+  opponent_template_id?: string;
   format: 5 | 8 | 11;
   formation: string;
+  opponent_formation?: string;
   slots: TacticSlot[];
   created_at: string;
   updated_at: string;
@@ -137,7 +142,15 @@ export class APIClient {
     return this.request<{ boards: TacticBoard[] }>("/api/tactics/boards");
   }
 
-  createBoard(input: { name: string; format: 5 | 8 | 11; formation: string; slots: TacticSlot[] }) {
+  createBoard(input: {
+    name: string;
+    template_id?: string;
+    opponent_template_id?: string;
+    format: 5 | 8 | 11;
+    formation: string;
+    opponent_formation?: string;
+    slots: TacticSlot[];
+  }) {
     return this.request<{ board: TacticBoard }>("/api/tactics/boards", {
       method: "POST",
       body: input,

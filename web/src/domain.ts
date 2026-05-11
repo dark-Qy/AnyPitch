@@ -20,6 +20,15 @@ export type SlotPosition = {
   y: number;
 };
 
+export type TacticFormat = 5 | 8 | 11;
+export type SlotSide = "home" | "opponent";
+
+export type TemplateLike = {
+  id: string;
+  format: TacticFormat;
+  slots: Array<SlotPosition & { slot_id: string; label: string; side?: SlotSide; player_id?: string }>;
+};
+
 export type CalendarDay = {
   key: string;
   date: Date;
@@ -48,6 +57,37 @@ export function normalizeSlotPosition(position: SlotPosition): SlotPosition {
     x: clamp(position.x),
     y: clamp(position.y),
   };
+}
+
+export function templatesForFormat<T extends { format: TacticFormat }>(templates: T[], format: TacticFormat): T[] {
+  return templates.filter((template) => template.format === format);
+}
+
+export function opponentSlotsFromTemplate<T extends TemplateLike>(template: T) {
+  return template.slots.map((slot) => ({
+    ...slot,
+    slot_id: `opponent:${stripSlotSide(slot.slot_id)}`,
+    side: "opponent" as const,
+    x: clamp(100 - slot.x),
+    y: opponentMirrorY(slot.y),
+    player_id: "",
+  }));
+}
+
+export function homeSlotsFromTemplate<T extends TemplateLike>(template: T) {
+  return template.slots.map((slot) => ({
+    ...slot,
+    slot_id: `home:${stripSlotSide(slot.slot_id)}`,
+    side: "home" as const,
+    player_id: "",
+  }));
+}
+
+export function pitchGeometry(format: TacticFormat) {
+  if (format === 5) {
+    return { ratio: "20 / 40", maxWidth: "460px" };
+  }
+  return { ratio: "68 / 105", maxWidth: "620px" };
 }
 
 export function buildMonthCalendar(year: number, month: number, today = new Date()): CalendarDay[] {
@@ -84,6 +124,18 @@ export function toLocalDateKey(value: string | Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function stripSlotSide(slotID: string) {
+  return slotID.replace(/^(home|opponent):/, "");
+}
+
+function opponentMirrorY(sourceY: number) {
+  const mirrored = clamp(100 - sourceY);
+  if (mirrored > 42 && mirrored < 58) {
+    return mirrored <= 50 ? 42 : 58;
+  }
+  return mirrored;
 }
 
 function clamp(value: number) {

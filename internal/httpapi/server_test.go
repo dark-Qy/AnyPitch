@@ -74,21 +74,31 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 
 	templates := performJSONRequest(t, handler, http.MethodGet, "/api/tactics/templates", token, nil)
 	assertStatus(t, templates, http.StatusOK)
+	assertJSONEquals(t, templates, "data.templates.0.id", "f5-121-press")
 	assertJSONEquals(t, templates, "data.templates.0.format", float64(5))
 	assertJSONEquals(t, templates, "data.templates.0.slots.0.label", "门将")
-	assertJSONEquals(t, templates, "data.templates.1.format", float64(8))
-	assertJSONEquals(t, templates, "data.templates.2.format", float64(11))
+	assertJSONEquals(t, templates, "data.templates.1.format", float64(5))
+	assertJSONEquals(t, templates, "data.templates.2.format", float64(8))
+	assertJSONEquals(t, templates, "data.templates.4.format", float64(11))
 
 	board := performJSONRequest(t, handler, http.MethodPost, "/api/tactics/boards", token, map[string]any{
-		"name":      "五人制高位压迫",
-		"format":    5,
-		"formation": "1-2-1",
+		"name":                 "五人制高位压迫",
+		"template_id":          "f5-121-press",
+		"opponent_template_id": "f5-211-counter",
+		"format":               5,
+		"formation":            "1-2-1",
+		"opponent_formation":   "2-1-1",
 		"slots": []map[string]any{
-			{"slot_id": "gk", "label": "门将", "x": 50, "y": 91, "player_id": playerID},
+			{"slot_id": "home:gk", "label": "门将", "x": 50, "y": 91, "player_id": playerID},
+			{"slot_id": "opponent:gk", "label": "门将", "side": "opponent", "x": 50, "y": 9, "player_id": ""},
 		},
 	})
 	assertStatus(t, board, http.StatusOK)
 	assertJSONEquals(t, board, "data.board.format", float64(5))
+	assertJSONEquals(t, board, "data.board.template_id", "f5-121-press")
+	assertJSONEquals(t, board, "data.board.opponent_formation", "2-1-1")
+	assertJSONEquals(t, board, "data.board.slots.0.side", "home")
+	assertJSONEquals(t, board, "data.board.slots.1.side", "opponent")
 
 	boards := performJSONRequest(t, handler, http.MethodGet, "/api/tactics/boards", token, nil)
 	assertStatus(t, boards, http.StatusOK)

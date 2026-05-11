@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   APIClient,
   Player,
@@ -37,8 +37,13 @@ import {
   attendanceSummary,
   buildMonthCalendar,
   groupEventsByDate,
+  homeSlotsFromTemplate,
   normalizeSlotPosition,
+  opponentSlotsFromTemplate,
+  pitchGeometry,
+  templatesForFormat,
   toLocalDateKey,
+  type TacticFormat,
 } from "./domain";
 
 const tokenKey = "anypitch_token";
@@ -246,9 +251,14 @@ function TacticsPanel({
   onBoardsChanged: (boards: TacticBoard[]) => void;
   onError: (message: string) => void;
 }) {
-  const fallbackTemplate = templates[0];
-  const [templateIndex, setTemplateIndex] = useState(0);
-  const activeTemplate = templates[templateIndex] ?? fallbackTemplate;
+  const [format, setFormat] = useState<TacticFormat>(5);
+  const formatTemplates = useMemo(() => templatesForFormat(templates, format), [templates, format]);
+  const [templateID, setTemplateID] = useState("");
+  const [opponentEnabled, setOpponentEnabled] = useState(false);
+  const [opponentTemplateID, setOpponentTemplateID] = useState("");
+  const activeTemplate = formatTemplates.find((template) => template.id === templateID) ?? formatTemplates[0] ?? templates[0];
+  const opponentTemplate = formatTemplates.find((template) => template.id === opponentTemplateID) ?? activeTemplate;
+  const geometry = pitchGeometry(format);
   const [boardName, setBoardName] = useState("五人制高位压迫");
   const [slots, setSlots] = useState<TacticSlot[]>([]);
   const [selectedSlotID, setSelectedSlotID] = useState<string>("");
@@ -261,14 +271,26 @@ function TacticsPanel({
     useSensor(KeyboardSensor),
   );
   const activeDragSlot = slots.find((slot) => slot.slot_id === activeDragID);
+  const selectedSlot = slots.find((slot) => slot.slot_id === selectedSlotID);
 
   useEffect(() => {
-    if (activeTemplate) {
-      setBoardName(activeTemplate.name);
-      setSlots(activeTemplate.slots.map((slot) => ({ ...slot, player_id: slot.player_id || "" })));
-      setSelectedSlotID(activeTemplate.slots[0]?.slot_id ?? "");
+    if (!formatTemplates.some((template) => template.id === templateID)) {
+      setTemplateID(formatTemplates[0]?.id ?? "");
     }
-  }, [activeTemplate?.format]);
+    if (!formatTemplates.some((template) => template.id === opponentTemplateID)) {
+      setOpponentTemplateID(formatTemplates[0]?.id ?? "");
+    }
+  }, [formatTemplates, opponentTemplateID, templateID]);
+
+  useEffect(() => {
+    if (!activeTemplate) {
+      return;
+    }
+    const nextSlots = homeSlotsFromTemplate(activeTemplate);
+    setBoardName(activeTemplate.name);
+    setSlots(opponentEnabled && opponentTemplate ? [...nextSlots, ...opponentSlotsFromTemplate(opponentTemplate)] : nextSlots);
+    setSelectedSlotID(nextSlots[0]?.slot_id ?? "");
+  }, [activeTemplate?.id, opponentEnabled, opponentTemplate?.id]);
 
   async function saveBoard() {
     if (!activeTemplate) {
@@ -277,8 +299,11 @@ function TacticsPanel({
     try {
       const result = await client.createBoard({
         name: boardName,
+        template_id: activeTemplate.id,
+        opponent_template_id: opponentEnabled ? opponentTemplate?.id : "",
         format: activeTemplate.format,
         formation: activeTemplate.formation,
+        opponent_formation: opponentEnabled ? opponentTemplate?.formation : "",
         slots,
       });
       onBoardsChanged([result.board, ...boards]);
@@ -318,7 +343,7 @@ function TacticsPanel({
   }
 
   function assignSelectedSlot(playerID: string) {
-    setSlots((current) => current.map((slot) => (slot.slot_id === selectedSlotID ? { ...slot, player_id: playerID } : slot)));
+    setSlots((current) => current.map((slot) => (slot.slot_id === selectedSlotID && slot.side !== "opponent" ? { ...slot, player_id: playerID } : slot)));
   }
 
   if (!activeTemplate) {
@@ -332,11 +357,21 @@ function TacticsPanel({
           <h2>拖拽站位</h2>
         </div>
         <label>
-          人制模板
-          <select value={templateIndex} onChange={(event) => setTemplateIndex(Number(event.target.value))}>
-            {templates.map((template, index) => (
-              <option value={index} key={template.format}>
-                {template.format} 人制 · {template.formation}
+          赛制
+          <select value={format} onChange={(event) => setFormat(Number(event.target.value) as TacticFormat)}>
+            {[5, 8, 11].map((nextFormat) => (
+              <option value={nextFormat} key={nextFormat}>
+                {nextFormat} 人制
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          我方模板
+          <select value={activeTemplate.id} onChange={(event) => setTemplateID(event.target.value)}>
+            {formatTemplates.map((template) => (
+              <option value={template.id} key={template.id}>
+                {template.name} · {template.formation}
               </option>
             ))}
           </select>
@@ -347,7 +382,11 @@ function TacticsPanel({
         </label>
         <label>
           选中位置分配队员
-          <select value={slots.find((slot) => slot.slot_id === selectedSlotID)?.player_id ?? ""} onChange={(event) => assignSelectedSlot(event.target.value)}>
+          <select
+            value={selectedSlot?.side === "opponent" ? "" : selectedSlot?.player_id ?? ""}
+            disabled={selectedSlot?.side === "opponent"}
+            onChange={(event) => assignSelectedSlot(event.target.value)}
+          >
             <option value="">未分配</option>
             {players.map((player) => (
               <option key={player.id} value={player.id}>
@@ -357,6 +396,22 @@ function TacticsPanel({
             ))}
           </select>
         </label>
+        <label className="toggle-row">
+          <input type="checkbox" checked={opponentEnabled} onChange={(event) => setOpponentEnabled(event.target.checked)} />
+          添加对手站位
+        </label>
+        {opponentEnabled ? (
+          <label>
+            对手模板
+            <select value={opponentTemplate?.id ?? ""} onChange={(event) => setOpponentTemplateID(event.target.value)}>
+              {formatTemplates.map((template) => (
+                <option value={template.id} key={template.id}>
+                  {template.name} · {template.formation}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <button className="primary-button" type="button" onClick={saveBoard}>
           <Save size={18} />
           保存战术板
@@ -369,6 +424,7 @@ function TacticsPanel({
               <span>{board.name}</span>
               <small>
                 {board.format}v{board.format} · {board.formation}
+                {board.opponent_formation ? ` vs ${board.opponent_formation}` : ""}
               </small>
             </button>
           ))}
@@ -376,7 +432,16 @@ function TacticsPanel({
       </div>
       <DndContext sensors={sensors} autoScroll={false} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveDragID("")}>
         <div className="pitch-shell">
-          <div className="pitch" ref={fieldRef}>
+          <div
+            className={`pitch pitch-${format} ${opponentEnabled ? "has-opponent" : ""}`}
+            ref={fieldRef}
+            style={
+              {
+                "--pitch-ratio": geometry.ratio,
+                "--pitch-max-width": geometry.maxWidth,
+              } as CSSProperties
+            }
+          >
             <div className="pitch-line center-line" />
             <div className="pitch-circle" />
             <div className="box top-box" />
@@ -387,7 +452,7 @@ function TacticsPanel({
                 slot={slot}
                 selected={selectedSlotID === slot.slot_id}
                 dragging={activeDragID === slot.slot_id}
-                player={players.find((player) => player.id === slot.player_id)}
+                player={slot.side === "opponent" ? undefined : players.find((player) => player.id === slot.player_id)}
                 onSelect={() => setSelectedSlotID(slot.slot_id)}
               />
             ))}
@@ -395,8 +460,11 @@ function TacticsPanel({
         </div>
         <DragOverlay dropAnimation={{ duration: 120, easing: "ease-out" }}>
           {activeDragSlot ? (
-            <div className="slot-marker drag-overlay">
-              <SlotMarkerContent slot={activeDragSlot} player={players.find((player) => player.id === activeDragSlot.player_id)} />
+            <div className={`slot-marker ${activeDragSlot.side === "opponent" ? "opponent" : ""} drag-overlay`}>
+              <SlotMarkerContent
+                slot={activeDragSlot}
+                player={activeDragSlot.side === "opponent" ? undefined : players.find((player) => player.id === activeDragSlot.player_id)}
+              />
             </div>
           ) : null}
         </DragOverlay>
@@ -422,7 +490,7 @@ function DraggableSlot({
   return (
     <button
       ref={setNodeRef}
-      className={`slot-marker ${selected ? "selected" : ""} ${dragging ? "dragging" : ""}`}
+      className={`slot-marker ${slot.side === "opponent" ? "opponent" : ""} ${selected ? "selected" : ""} ${dragging ? "dragging" : ""}`}
       style={{
         left: `${slot.x}%`,
         top: `${slot.y}%`,

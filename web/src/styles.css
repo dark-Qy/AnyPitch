@@ -76,6 +76,21 @@ select {
   color: var(--ink);
 }
 
+select {
+  appearance: none;
+  padding-right: 42px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 12px) 50%;
+  background-repeat: no-repeat;
+  background-size:
+    6px 6px,
+    6px 6px;
+}
+
 input:focus,
 select:focus,
 button:focus-visible {
@@ -357,12 +372,15 @@ p {
 
 .pitch-shell {
   padding: 18px;
+  overflow-x: auto;
 }
 
 .pitch {
   position: relative;
-  width: 100%;
-  min-height: 650px;
+  width: min(100%, var(--pitch-max-width, 620px));
+  min-width: min(100%, 330px);
+  aspect-ratio: var(--pitch-ratio, 68 / 105);
+  margin: 0 auto;
   overflow: hidden;
   border: 3px solid var(--ink);
   border-radius: 8px;
@@ -411,9 +429,9 @@ p {
 }
 
 .box {
-  left: 30%;
-  right: 30%;
-  height: 92px;
+  left: 28%;
+  right: 28%;
+  height: 12%;
   border: 3px solid rgba(255, 250, 240, 0.68);
 }
 
@@ -453,6 +471,21 @@ p {
   box-shadow: 5px 5px 0 var(--amber);
 }
 
+.slot-marker.opponent {
+  background: #f3e4d0;
+  box-shadow: 5px 5px 0 rgba(177, 60, 46, 0.42);
+}
+
+.slot-marker.opponent.selected {
+  box-shadow: 5px 5px 0 var(--danger);
+}
+
+.pitch.has-opponent .slot-marker {
+  width: 58px;
+  min-height: 58px;
+  font-size: 12px;
+}
+
 .slot-marker.dragging {
   opacity: 0.42;
   cursor: grabbing;
@@ -481,6 +514,26 @@ p {
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.toggle-row {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 0 10px;
+  background: rgba(24, 160, 108, 0.08);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.toggle-row input {
+  width: 18px;
+  min-height: 18px;
+  accent-color: var(--signal-green);
 }
 
 .saved-list {
@@ -722,7 +775,7 @@ p {
   }
 
   .pitch {
-    min-height: 540px;
+    min-height: unset;
   }
 }
 
@@ -781,14 +834,34 @@ p {
     font-size: 10px;
   }
 
-  .pitch {
-    min-height: 520px;
-  }
-
   .slot-marker {
     width: 58px;
     min-height: 58px;
     font-size: 12px;
+  }
+
+  .pitch.has-opponent .slot-marker {
+    width: 46px;
+    min-height: 46px;
+    padding: 4px;
+    font-size: 11px;
+    box-shadow: 3px 3px 0 rgba(22, 21, 18, 0.3);
+  }
+
+  .pitch.has-opponent .slot-marker.selected {
+    box-shadow: 3px 3px 0 var(--amber);
+  }
+
+  .pitch.has-opponent .slot-marker.opponent {
+    box-shadow: 3px 3px 0 rgba(177, 60, 46, 0.42);
+  }
+
+  .pitch.has-opponent .slot-marker.opponent.selected {
+    box-shadow: 3px 3px 0 var(--danger);
+  }
+
+  .pitch.has-opponent .slot-marker small {
+    max-width: 38px;
   }
 
   .attendance-row {

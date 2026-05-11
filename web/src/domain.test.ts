@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { attendanceSummary, buildMonthCalendar, groupEventsByDate, normalizeSlotPosition } from "./domain";
+import {
+  attendanceSummary,
+  buildMonthCalendar,
+  groupEventsByDate,
+  opponentSlotsFromTemplate,
+  pitchGeometry,
+  templatesForFormat,
+  normalizeSlotPosition,
+} from "./domain";
 
 describe("attendanceSummary", () => {
   it("summarizes available and unavailable player counts", () => {
@@ -41,5 +49,40 @@ describe("groupEventsByDate", () => {
 
     expect(grouped["2026-05-13"]).toHaveLength(2);
     expect(grouped["2026-05-16"][0].title).toBe("友谊赛");
+  });
+});
+
+describe("tactic helpers", () => {
+  const templates = [
+    { id: "f5", format: 5 as const, slots: [{ slot_id: "gk", label: "门将", x: 50, y: 91 }] },
+    { id: "f8", format: 8 as const, slots: [{ slot_id: "gk", label: "门将", x: 50, y: 93 }] },
+  ];
+
+  it("filters templates by format", () => {
+    expect(templatesForFormat(templates, 5).map((template) => template.id)).toEqual(["f5"]);
+  });
+
+  it("mirrors opponent slots to the opposite half", () => {
+    expect(opponentSlotsFromTemplate(templates[0])[0]).toMatchObject({
+      slot_id: "opponent:gk",
+      side: "opponent",
+      x: 50,
+      y: 9,
+    });
+  });
+
+  it("nudges mirrored opponent midfielders away from direct overlap", () => {
+    const mirrored = opponentSlotsFromTemplate({
+      id: "f8",
+      format: 8,
+      slots: [{ slot_id: "cm", label: "中场", x: 50, y: 50 }],
+    });
+
+    expect(mirrored[0]).toMatchObject({ slot_id: "opponent:cm", side: "opponent", x: 50, y: 42 });
+  });
+
+  it("selects a realistic vertical pitch ratio", () => {
+    expect(pitchGeometry(5)).toEqual({ ratio: "20 / 40", maxWidth: "460px" });
+    expect(pitchGeometry(11)).toEqual({ ratio: "68 / 105", maxWidth: "620px" });
   });
 });
