@@ -154,7 +154,7 @@ p {
   align-content: end;
   gap: 18px;
   overflow: hidden;
-  padding: 24px;
+  padding: 52px 48px 44px;
 }
 
 .auth-brand::before {
@@ -408,10 +408,32 @@ p {
   gap: 10px;
 }
 
-.panel-subheading h3 {
+.inline-heading-button {
+  min-width: 0;
+  min-height: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.inline-heading-button:hover,
+.inline-heading-button:focus-visible {
+  color: var(--signal-green);
+  box-shadow: none;
+  transform: none;
+}
+
+.panel-subheading h3,
+.inline-heading-title {
   margin-bottom: 0;
   font-size: 15px;
   line-height: 1.1;
+  font-weight: 900;
 }
 
 .panel-subheading small {
@@ -426,6 +448,12 @@ p {
   align-items: center;
   justify-content: center;
   gap: 9px;
+}
+
+.compact-button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .primary-button {
@@ -772,7 +800,7 @@ p {
   width: 100%;
   min-height: 34px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 5px;
   overflow: hidden;
@@ -800,6 +828,7 @@ p {
 }
 
 .event-chip-status {
+  display: none;
   border: 1px solid currentColor;
   border-radius: 4px;
   padding: 2px 3px;
@@ -936,22 +965,23 @@ button.event-chip:focus-visible {
 }
 
 .status-overview,
-.past-events-block {
+.event-count-summary {
   display: grid;
   gap: 8px;
 }
 
-.past-events-block {
-  border-top: 2px solid var(--line-soft);
-  padding-top: 12px;
-}
-
-.past-event-list {
+.event-overview-list {
   display: grid;
   gap: 8px;
 }
 
-.past-event-row {
+.event-fold-button {
+  width: 100%;
+  color: var(--ink);
+  background: var(--paper-deep);
+}
+
+.event-overview-row {
   width: 100%;
   min-height: 58px;
   display: grid;
@@ -964,8 +994,8 @@ button.event-chip:focus-visible {
   text-align: left;
 }
 
-.past-event-row strong,
-.past-event-row small {
+.event-overview-row strong,
+.event-overview-row small {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -973,35 +1003,39 @@ button.event-chip:focus-visible {
   white-space: nowrap;
 }
 
-.past-event-row small {
+.event-overview-row small {
   margin-top: 2px;
   color: var(--muted);
   font-family: "SFMono-Regular", "Cascadia Mono", monospace;
   font-size: 11px;
 }
 
-.past-event-row.active {
+.event-overview-row.is-past {
+  opacity: 0.82;
+}
+
+.event-overview-row.active {
   box-shadow: 4px 4px 0 var(--signal-green);
 }
 
-.past-event-row.status-available {
+.event-overview-row.status-available {
   border-color: var(--signal-green);
 }
 
-.past-event-row.status-unavailable {
+.event-overview-row.status-unavailable {
   border-color: var(--danger);
 }
 
-.past-event-row.status-tentative {
+.event-overview-row.status-tentative {
   border-color: var(--amber);
 }
 
-.past-event-row.status-unknown {
+.event-overview-row.status-unknown {
   border-style: dashed;
   border-color: var(--muted);
 }
 
-.past-event-status {
+.event-overview-status {
   border: 2px solid var(--ink);
   border-radius: 5px;
   padding: 5px 7px;
@@ -1011,17 +1045,17 @@ button.event-chip:focus-visible {
   white-space: nowrap;
 }
 
-.past-event-row.status-available .past-event-status {
+.event-overview-row.status-available .event-overview-status {
   color: var(--paper);
   background: var(--signal-green);
 }
 
-.past-event-row.status-unavailable .past-event-status {
+.event-overview-row.status-unavailable .event-overview-status {
   color: var(--paper);
   background: var(--danger);
 }
 
-.past-event-row.status-tentative .past-event-status {
+.event-overview-row.status-tentative .event-overview-status {
   background: var(--amber);
 }
 
@@ -1254,6 +1288,7 @@ button.event-chip:focus-visible {
 
   .auth-brand {
     min-height: 300px;
+    padding: 42px 34px 36px;
   }
 
   .auth-brand h1 {
@@ -1306,13 +1341,9 @@ button.event-chip:focus-visible {
   }
 
   .event-chip-time {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 9px;
+    display: none;
   }
 
-  .event-chip-title,
   .event-chip-status {
     display: none;
   }

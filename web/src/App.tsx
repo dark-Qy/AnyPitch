@@ -472,21 +472,30 @@ function PlayerPortal({
   onError: (message: string) => void;
 }) {
   const today = useMemo(() => new Date(), []);
-  const [selectedEventID, setSelectedEventID] = useState(events[0]?.id ?? "");
+  const [selectedEventID, setSelectedEventID] = useState("");
   const [status, setStatus] = useState<PlayerAttendanceStatus>("unknown");
   const [decisionSummary, setDecisionSummary] = useState<AttendanceDecisionSummary>(emptyAttendanceSummary);
   const [refreshingEvents, setRefreshingEvents] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
+  const [showPastEvents, setShowPastEvents] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
-  const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const statusByEvent = useMemo(() => buildPlayerEventStatusMap(events, attendanceRecords), [events, attendanceRecords]);
   const splitEvents = useMemo(() => splitEventsByTime(events, today), [events, today]);
-  const selectedEvent = events.find((event) => event.id === selectedEventID) ?? events[0];
+  const visibleEvents = splitEvents.upcoming;
+  const hiddenPastCount = splitEvents.past.length;
+  const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  const selectedEvent = events.find((event) => event.id === selectedEventID);
   const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
 
   useEffect(() => {
-    setSelectedEventID((current) => nextSelectedEventID(current, events));
-  }, [events]);
+    setSelectedEventID((current) => {
+      if (current && events.some((event) => event.id === current)) {
+        return current;
+      }
+      return nextSelectedEventID("", visibleEvents.length > 0 ? visibleEvents : events);
+    });
+  }, [events, visibleEvents]);
 
   useEffect(() => {
     if (selectedEvent?.id) {
@@ -620,14 +629,16 @@ function PlayerPortal({
                             type="button"
                             key={event.id}
                             onClick={() => selectEvent(event)}
-                            aria-label={`${eventTimeRange(event)} ${event.title}，${statusLabel}`}
-                            title={`${eventTimeRange(event)} ${event.title} · ${statusLabel}`}
+                            aria-label={`${event.title}，${eventTimeRange(event)}，${statusLabel}`}
+                            title={`${event.title} · ${eventTimeRange(event)} · ${statusLabel}`}
                           >
-                            <span className="event-chip-time">{eventTimeRange(event)}</span>
                             <span className="event-chip-title">
                               {event.type === "training" ? "训" : "赛"} {event.title}
                             </span>
-                            <span className="event-chip-status">{statusLabel}</span>
+                            <span className="event-chip-time">{eventTimeRange(event)}</span>
+                            <span className="event-chip-status" aria-hidden="true">
+                              {statusLabel}
+                            </span>
                           </button>
                         );
                       })}
@@ -654,8 +665,13 @@ function PlayerPortal({
             </div>
             <div className="status-overview" aria-label="全部日程总状况">
               <div className="panel-subheading">
-                <h3>全部日程</h3>
-                <small>{events.length} 场</small>
+                <button className="inline-heading-button" type="button" onClick={() => setShowAllEvents((current) => !current)}>
+                  <span className="inline-heading-title">全部日程</span>
+                  <small>{events.length} 场总计 · {visibleEvents.length} 场未结束</small>
+                </button>
+                <button className="ghost-button compact-button" type="button" onClick={() => setShowAllEvents((current) => !current)}>
+                  {showAllEvents ? "收起" : "查看列表"}
+                </button>
               </div>
               <div className="decision-summary overall-summary">
                 <span className="available">参加 {attendanceSummary.available}</span>
@@ -663,6 +679,62 @@ function PlayerPortal({
                 <span className="tentative">待定 {attendanceSummary.tentative}</span>
                 <span>未确认 {attendanceSummary.unknown}</span>
               </div>
+              {showAllEvents ? (
+                <div className="event-overview-list" aria-label="全部日程列表">
+                  {visibleEvents.map((event) => {
+                    const eventStatus = statusByEvent[event.id] ?? "unknown";
+                    const statusLabel = calendarEventStatusLabel(eventStatus);
+                    return (
+                      <button
+                        className={`event-overview-row ${calendarEventStatusClass(eventStatus)} ${
+                          selectedEvent?.id === event.id ? "active" : ""
+                        }`}
+                        type="button"
+                        key={event.id}
+                        onClick={() => selectEvent(event)}
+                      >
+                        <span>
+                          <strong>{event.type === "training" ? "训" : "赛"} {event.title}</strong>
+                          <small>
+                            {formatDateRange(event.starts_at, event.ends_at)} · {event.location}
+                          </small>
+                        </span>
+                        <span className="event-overview-status">{statusLabel}</span>
+                      </button>
+                    );
+                  })}
+                  {hiddenPastCount > 0 ? (
+                    <button className="ghost-button compact-button event-fold-button" type="button" onClick={() => setShowPastEvents((current) => !current)}>
+                      {showPastEvents ? "收起已结束日程" : `显示已结束 ${hiddenPastCount} 场`}
+                    </button>
+                  ) : null}
+                  {showPastEvents
+                    ? splitEvents.past.map((event) => {
+                        const eventStatus = statusByEvent[event.id] ?? "unknown";
+                        const statusLabel = calendarEventStatusLabel(eventStatus);
+                        return (
+                          <button
+                            className={`event-overview-row is-past ${calendarEventStatusClass(eventStatus)} ${
+                              selectedEvent?.id === event.id ? "active" : ""
+                            }`}
+                            type="button"
+                            key={event.id}
+                            onClick={() => selectEvent(event)}
+                          >
+                            <span>
+                              <strong>{event.type === "training" ? "训" : "赛"} {event.title}</strong>
+                              <small>
+                                {formatDateRange(event.starts_at, event.ends_at)} · {event.location}
+                              </small>
+                            </span>
+                            <span className="event-overview-status">{statusLabel}</span>
+                          </button>
+                        );
+                      })
+                    : null}
+                  {visibleEvents.length === 0 ? <div className="empty-state">暂时没有未结束日程</div> : null}
+                </div>
+              ) : null}
             </div>
             {selectedEvent ? (
               <>
@@ -672,11 +744,16 @@ function PlayerPortal({
                   <small>{selectedEvent.location}</small>
                   {selectedEvent.notes ? <p>{selectedEvent.notes}</p> : null}
                 </article>
-                <div className="decision-summary" aria-label="队员确认汇总">
-                  <span className="available">参加 {decisionSummary.available}</span>
-                  <span className="unavailable">拒绝 {decisionSummary.unavailable}</span>
-                  <span className="tentative">待定 {decisionSummary.tentative}</span>
-                  <span>未确认 {decisionSummary.unknown}</span>
+                <div className="event-count-summary">
+                  <div className="panel-subheading">
+                    <h3>本场参加人数</h3>
+                  </div>
+                  <div className="decision-summary" aria-label="本场队员参加人数汇总">
+                    <span className="available">参加人数 {decisionSummary.available}</span>
+                    <span className="unavailable">拒绝人数 {decisionSummary.unavailable}</span>
+                    <span className="tentative">待定人数 {decisionSummary.tentative}</span>
+                    <span>未确认人数 {decisionSummary.unknown}</span>
+                  </div>
                 </div>
                 <div className="status-choice">
                   {playerAttendanceOptions.map((option) => (
@@ -698,41 +775,9 @@ function PlayerPortal({
                   <Save size={18} />
                   保存状态
                 </button>
-                {splitEvents.past.length > 0 ? (
-                  <section className="past-events-block" aria-label="已结束日程">
-                    <div className="panel-subheading">
-                      <h3>已结束日程</h3>
-                      <small>{splitEvents.past.length} 场</small>
-                    </div>
-                    <div className="past-event-list">
-                      {splitEvents.past.map((event) => {
-                        const eventStatus = statusByEvent[event.id] ?? "unknown";
-                        const statusLabel = calendarEventStatusLabel(eventStatus);
-                        return (
-                          <button
-                            className={`past-event-row ${calendarEventStatusClass(eventStatus)} ${
-                              selectedEvent.id === event.id ? "active" : ""
-                            }`}
-                            type="button"
-                            key={event.id}
-                            onClick={() => selectEvent(event)}
-                          >
-                            <span>
-                              <strong>{event.title}</strong>
-                              <small>
-                                {formatDateRange(event.starts_at, event.ends_at)} · {event.location}
-                              </small>
-                            </span>
-                            <span className="past-event-status">{statusLabel}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                ) : null}
               </>
             ) : (
-              <div className="empty-state">暂时还没有训练或友谊赛日程</div>
+              <div className="empty-state">暂时没有未结束日程</div>
             )}
           </div>
         </section>

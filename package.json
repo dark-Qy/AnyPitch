@@ -1,0 +1,9 @@
+{
+  "name": "anypitch",
+  "private": true,
+  "scripts": {
+    "dev": "export PATH=/opt/homebrew/bin:$PATH; npm --prefix web run dev --",
+    "build": "export PATH=/opt/homebrew/bin:$PATH; npm --prefix web run build",
+    "test": "export PATH=/opt/homebrew/bin:$PATH; npm --prefix web run test"
+  }
+}
