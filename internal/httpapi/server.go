@@ -402,7 +402,12 @@ func (h *Handler) playerEventsCollection(w http.ResponseWriter, r *http.Request,
 		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list events.")
 		return
 	}
-	writeSuccess(w, map[string]any{"events": events})
+	records, summary, err := h.attendance.ListForPlayer(ctx.teamID, ctx.player.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list player attendance.")
+		return
+	}
+	writeSuccess(w, map[string]any{"events": events, "attendance_records": records, "attendance_summary": summary})
 }
 
 func (h *Handler) playerEventNested(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {

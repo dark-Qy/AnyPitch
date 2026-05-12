@@ -23,7 +23,7 @@ GOCACHE=$(pwd)/.gocache GOMODCACHE=$(pwd)/.gomodcache go run ./cmd/server
 
 ```bash
 npm --prefix web install
-npm --prefix web run dev
+npm run dev
 ```
 
 默认地址：
@@ -43,8 +43,8 @@ ANYPITCH_COACH_PASSWORD='你的教练密码' GOCACHE=$(pwd)/.gocache GOMODCACHE=
 
 ```bash
 GOCACHE=$(pwd)/.gocache GOMODCACHE=$(pwd)/.gomodcache go test ./...
-npm --prefix web run test
-npm --prefix web run build
+npm run test
+npm run build
 ./scripts/validate_api_smoke.sh
 ```
 
@@ -52,7 +52,7 @@ npm --prefix web run build
 
 - 第一版是单队 MVP，不做多球队或俱乐部层级
 - 教练必须登录；队员入口只允许输入已存在队员姓名，不需要密码
-- 队员只能查看日程、查看参加/拒绝/待定/未确认汇总，并维护自己的参加状态，不能管理队员、地点、战术板或全队出勤
+- 队员只能查看日程、查看参加/拒绝/待定/未确认汇总，并维护自己的参加状态；队员端会展示自己对全部日程的总状况，已结束日程在列表中默认折叠，不能管理队员、地点、战术板或全队出勤
 - 日程时间使用开始/结束时间段，可填写训练内容等备注；地点默认 `北京邮电大学（海淀校区）`，并支持在 Web 里维护常用地点
 - 手机端只做 Web 响应式适配，不做 PWA、Capacitor 或原生 App
 - 战术板支持多赛制、多原始模板、对手站位和拖拽保存，不做跑位动画或复杂比赛统计

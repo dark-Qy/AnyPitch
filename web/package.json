@@ -4,10 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "test": "vitest run"
+    "dev": "export PATH=/opt/homebrew/bin:$PATH; vite",
+    "build": "export PATH=/opt/homebrew/bin:$PATH; tsc --noEmit && vite build",
+    "preview": "export PATH=/opt/homebrew/bin:$PATH; vite preview",
+    "test": "export PATH=/opt/homebrew/bin:$PATH; vitest run"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

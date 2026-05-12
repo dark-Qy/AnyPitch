@@ -217,6 +217,139 @@ func TestPlayerCanLoginByNameAndOnlyManageOwnAttendance(t *testing.T) {
 	assertStatus(t, forbidden, http.StatusUnauthorized)
 }
 
+func TestPlayerEventsIncludeOwnAttendanceOverview(t *testing.T) {
+	handler := newTestHandler(t)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	coachToken := jsonPath(t, login, "data.token").(string)
+
+	player := performJSONRequest(t, handler, http.MethodPost, "/api/players", coachToken, map[string]any{
+		"name":      "林海",
+		"number":    10,
+		"positions": []string{"前腰"},
+	})
+	assertStatus(t, player, http.StatusOK)
+	playerID := jsonPath(t, player, "data.player.id").(string)
+
+	otherPlayer := performJSONRequest(t, handler, http.MethodPost, "/api/players", coachToken, map[string]any{
+		"name":      "周舟",
+		"number":    7,
+		"positions": []string{"边锋"},
+	})
+	assertStatus(t, otherPlayer, http.StatusOK)
+	otherPlayerID := jsonPath(t, otherPlayer, "data.player.id").(string)
+
+	pastTraining := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
+		"type":      "training",
+		"title":     "五一恢复训练",
+		"starts_at": "2026-05-01T20:00:00+08:00",
+	})
+	assertStatus(t, pastTraining, http.StatusOK)
+	pastEventID := jsonPath(t, pastTraining, "data.event.id").(string)
+
+	futureTraining := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
+		"type":      "training",
+		"title":     "周三控球训练",
+		"starts_at": "2026-05-13T20:00:00+08:00",
+	})
+	assertStatus(t, futureTraining, http.StatusOK)
+	futureEventID := jsonPath(t, futureTraining, "data.event.id").(string)
+
+	unconfirmedFriendly := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
+		"type":      "friendly",
+		"title":     "周末友谊赛",
+		"starts_at": "2026-05-16T18:00:00+08:00",
+	})
+	assertStatus(t, unconfirmedFriendly, http.StatusOK)
+	unconfirmedEventID := jsonPath(t, unconfirmedFriendly, "data.event.id").(string)
+
+	pastAttendance := performJSONRequest(t, handler, http.MethodPut, "/api/events/"+pastEventID+"/attendance", coachToken, map[string]any{
+		"records": []map[string]any{
+			{"player_id": playerID, "status": "available", "note": ""},
+		},
+	})
+	assertStatus(t, pastAttendance, http.StatusOK)
+
+	futureAttendance := performJSONRequest(t, handler, http.MethodPut, "/api/events/"+futureEventID+"/attendance", coachToken, map[string]any{
+		"records": []map[string]any{
+			{"player_id": playerID, "status": "tentative", "note": ""},
+			{"player_id": otherPlayerID, "status": "unavailable", "note": ""},
+		},
+	})
+	assertStatus(t, futureAttendance, http.StatusOK)
+
+	otherOnlyAttendance := performJSONRequest(t, handler, http.MethodPut, "/api/events/"+unconfirmedEventID+"/attendance", coachToken, map[string]any{
+		"records": []map[string]any{
+			{"player_id": otherPlayerID, "status": "unavailable", "note": ""},
+		},
+	})
+	assertStatus(t, otherOnlyAttendance, http.StatusOK)
+
+	playerLogin := performJSONRequest(t, handler, http.MethodPost, "/api/player/login", "", map[string]any{
+		"name": "林海",
+	})
+	assertStatus(t, playerLogin, http.StatusOK)
+	playerToken := jsonPath(t, playerLogin, "data.token").(string)
+
+	response := performJSONRequest(t, handler, http.MethodGet, "/api/player/events", playerToken, nil)
+	assertStatus(t, response, http.StatusOK)
+
+	var payload struct {
+		Data struct {
+			Events []struct {
+				ID string `json:"id"`
+			} `json:"events"`
+			AttendanceRecords []struct {
+				EventID  string `json:"event_id"`
+				PlayerID string `json:"player_id"`
+				Status   string `json:"status"`
+			} `json:"attendance_records"`
+			AttendanceSummary struct {
+				Available   int `json:"available"`
+				Unavailable int `json:"unavailable"`
+				Tentative   int `json:"tentative"`
+				Unknown     int `json:"unknown"`
+			} `json:"attendance_summary"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode player events overview: %v; body=%s", err, response.Body.String())
+	}
+
+	if len(payload.Data.Events) != 3 {
+		t.Fatalf("expected 3 player events, got %d in %s", len(payload.Data.Events), response.Body.String())
+	}
+	if len(payload.Data.AttendanceRecords) != 2 {
+		t.Fatalf("expected only current player's 2 attendance records, got %d in %s", len(payload.Data.AttendanceRecords), response.Body.String())
+	}
+
+	recordsByEvent := map[string]string{}
+	for _, record := range payload.Data.AttendanceRecords {
+		if record.PlayerID != playerID {
+			t.Fatalf("leaked attendance for player %q in %s", record.PlayerID, response.Body.String())
+		}
+		recordsByEvent[record.EventID] = record.Status
+	}
+	if recordsByEvent[pastEventID] != "available" {
+		t.Fatalf("expected past event status available, got %#v in %s", recordsByEvent[pastEventID], response.Body.String())
+	}
+	if recordsByEvent[futureEventID] != "tentative" {
+		t.Fatalf("expected future event status tentative, got %#v in %s", recordsByEvent[futureEventID], response.Body.String())
+	}
+	if _, ok := recordsByEvent[unconfirmedEventID]; ok {
+		t.Fatalf("expected unconfirmed event to have no saved player record in %s", response.Body.String())
+	}
+	if payload.Data.AttendanceSummary.Available != 1 ||
+		payload.Data.AttendanceSummary.Unavailable != 0 ||
+		payload.Data.AttendanceSummary.Tentative != 1 ||
+		payload.Data.AttendanceSummary.Unknown != 1 {
+		t.Fatalf("unexpected attendance summary: %#v in %s", payload.Data.AttendanceSummary, response.Body.String())
+	}
+}
+
 func TestDefaultCoachPasswordCanComeFromEnvironment(t *testing.T) {
 	t.Setenv("ANYPITCH_COACH_PASSWORD", "CoachSecret@2026")
 	handler := newTestHandler(t)
