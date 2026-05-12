@@ -1,4 +1,4 @@
-import type { AttendanceDecisionSummary, AttendanceRecord, AttendanceStatus } from "./domain";
+import type { AttendanceDecisionSummary, AttendanceRecord, AttendanceStatus, PlayerEventAttendanceRecord } from "./domain";
 
 export type User = {
   id: string;
@@ -149,7 +149,11 @@ export class APIClient {
   }
 
   listPlayerEvents() {
-    return this.request<{ events: TeamEvent[] }>("/api/player/events");
+    return this.request<{
+      events: TeamEvent[];
+      attendance_records: PlayerEventAttendanceRecord[];
+      attendance_summary: AttendanceDecisionSummary;
+    }>("/api/player/events");
   }
 
   listLocations() {

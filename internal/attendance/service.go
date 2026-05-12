@@ -15,6 +15,14 @@ type Record struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+type PlayerEventRecord struct {
+	EventID   string `json:"event_id"`
+	PlayerID  string `json:"player_id"`
+	Status    string `json:"status"`
+	Note      string `json:"note"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type Summary struct {
 	Available   int `json:"available"`
 	Unavailable int `json:"unavailable"`
@@ -167,6 +175,59 @@ func (s *Service) SaveForPlayer(teamID, eventID, playerID, status string) (Recor
 	return record, nil
 }
 
+func (s *Service) ListForPlayer(teamID, playerID string) ([]PlayerEventRecord, Summary, error) {
+	if err := s.ensurePlayer(teamID, playerID); err != nil {
+		return nil, Summary{}, err
+	}
+	rows, err := s.db.Query(
+		`SELECT e.id, a.status, a.note, a.updated_at
+		 FROM events e
+		 LEFT JOIN attendance_records a ON a.event_id = e.id AND a.player_id = ?
+		 WHERE e.team_id = ?
+		 ORDER BY e.starts_at`,
+		playerID,
+		teamID,
+	)
+	if err != nil {
+		return nil, Summary{}, err
+	}
+	defer rows.Close()
+
+	records := []PlayerEventRecord{}
+	var summary Summary
+	totalEvents := 0
+	for rows.Next() {
+		totalEvents++
+		var eventID string
+		var status sql.NullString
+		var note sql.NullString
+		var updatedAt sql.NullString
+		if err := rows.Scan(&eventID, &status, &note, &updatedAt); err != nil {
+			return nil, Summary{}, err
+		}
+		if !status.Valid {
+			continue
+		}
+		record := PlayerEventRecord{
+			EventID:   eventID,
+			PlayerID:  playerID,
+			Status:    status.String,
+			Note:      note.String,
+			UpdatedAt: updatedAt.String,
+		}
+		records = append(records, record)
+		addToSummary(&summary, record.Status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, Summary{}, err
+	}
+	known := summary.Available + summary.Unavailable + summary.Tentative
+	if totalEvents > known {
+		summary.Unknown = totalEvents - known
+	}
+	return records, summary, nil
+}
+
 func (s *Service) Summary(teamID, eventID string) (Summary, error) {
 	if err := s.ensureEvent(teamID, eventID); err != nil {
 		return Summary{}, err
@@ -194,14 +255,7 @@ func (s *Service) Summary(teamID, eventID string) (Summary, error) {
 		if err := rows.Scan(&status); err != nil {
 			return Summary{}, err
 		}
-		switch status {
-		case "available", "late", "present":
-			summary.Available++
-		case "unavailable", "injured", "absent", "excused":
-			summary.Unavailable++
-		case "tentative":
-			summary.Tentative++
-		}
+		addToSummary(&summary, status)
 	}
 	if err := rows.Err(); err != nil {
 		return Summary{}, err
@@ -213,6 +267,15 @@ func (s *Service) Summary(teamID, eventID string) (Summary, error) {
 	return summary, nil
 }
 
+func (s *Service) ensurePlayer(teamID, playerID string) error {
+	var exists int
+	err := s.db.QueryRow(`SELECT 1 FROM players WHERE id = ? AND team_id = ?`, playerID, teamID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrInvalidAttendance
+	}
+	return err
+}
+
 func (s *Service) ensureEvent(teamID, eventID string) error {
 	var exists int
 	err := s.db.QueryRow(`SELECT 1 FROM events WHERE id = ? AND team_id = ?`, eventID, teamID).Scan(&exists)
@@ -220,6 +283,17 @@ func (s *Service) ensureEvent(teamID, eventID string) error {
 		return ErrInvalidAttendance
 	}
 	return err
+}
+
+func addToSummary(summary *Summary, status string) {
+	switch status {
+	case "available", "late", "present":
+		summary.Available++
+	case "unavailable", "injured", "absent", "excused":
+		summary.Unavailable++
+	case "tentative":
+		summary.Tentative++
+	}
 }
 
 func ensurePlayer(tx *sql.Tx, teamID, playerID string) error {

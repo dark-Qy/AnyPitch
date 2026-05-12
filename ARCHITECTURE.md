@@ -42,6 +42,7 @@
 
 - 队员自助状态包含 `unknown`（未确认）/ `available`（参加）/ `unavailable`（拒绝）/ `tentative`（待定）
 - 队员端只返回全队状态汇总，不暴露其他队员的个人选择明细
+- `GET /api/player/events` 在 `events` 外返回当前队员自己的 `attendance_records` 和 `attendance_summary`，其中 `attendance_records` 带 `event_id`，缺失记录按 `unknown` 计入汇总
 
 ## Auth Schema
 

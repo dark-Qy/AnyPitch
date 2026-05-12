@@ -38,10 +38,15 @@ import {
   AttendanceDecisionSummary,
   AttendanceRecord,
   AttendanceStatus,
+  PlayerEventAttendanceRecord,
   activeRosterPlayers,
   attendanceDecisionSummary,
   buildAttendanceStatusMap,
   buildMonthCalendar,
+  buildPlayerEventStatusMap,
+  calendarEventStatusClass,
+  calendarEventStatusLabel,
+  eventTimeRange,
   groupEventsByDate,
   homeSlotsFromTemplate,
   initialCoachLoginDraft,
@@ -49,6 +54,7 @@ import {
   opponentSlotsFromTemplate,
   pitchGeometry,
   positionAfterDragDelta,
+  splitEventsByTime,
   templatesForFormat,
   toLocalDateKey,
   type TacticFormat,
@@ -96,6 +102,7 @@ const emptyAttendanceSummary: AttendanceDecisionSummary = {
 
 type View = "tactics" | "players" | "calendar" | "attendance";
 type SessionMode = "coach" | "player";
+type PlayerAttendanceStatus = (typeof playerAttendanceOptions)[number];
 
 export function App() {
   const initialPlayerToken = localStorage.getItem(playerTokenKey);
@@ -108,6 +115,8 @@ export function App() {
   const [view, setView] = useState<View>("tactics");
   const [players, setPlayers] = useState<Player[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
+  const [playerEventAttendanceRecords, setPlayerEventAttendanceRecords] = useState<PlayerEventAttendanceRecord[]>([]);
+  const [playerAttendanceSummary, setPlayerAttendanceSummary] = useState<AttendanceDecisionSummary>(emptyAttendanceSummary);
   const [locations, setLocations] = useState<EventLocation[]>([]);
   const [templates, setTemplates] = useState<TacticTemplate[]>([]);
   const [boards, setBoards] = useState<TacticBoard[]>([]);
@@ -140,6 +149,8 @@ export function App() {
       setPlayer(null);
       setPlayers(playerResult.players);
       setEvents(eventResult.events);
+      setPlayerEventAttendanceRecords([]);
+      setPlayerAttendanceSummary(emptyAttendanceSummary);
       setLocations(locationResult.locations);
       setTemplates(templateResult.templates);
       setBoards(boardResult.boards);
@@ -161,6 +172,8 @@ export function App() {
       setPlayer(me.player);
       setUser(null);
       setEvents(eventResult.events);
+      setPlayerEventAttendanceRecords(eventResult.attendance_records);
+      setPlayerAttendanceSummary(eventResult.attendance_summary);
     } catch (err) {
       setError(messageFromError(err));
       setToken(null);
@@ -175,6 +188,8 @@ export function App() {
     try {
       const eventResult = await client.listPlayerEvents();
       setEvents(eventResult.events);
+      setPlayerEventAttendanceRecords(eventResult.attendance_records);
+      setPlayerAttendanceSummary(eventResult.attendance_summary);
       setError("");
     } catch (err) {
       setError(messageFromError(err));
@@ -221,6 +236,8 @@ export function App() {
     setMode(null);
     setUser(null);
     setPlayer(null);
+    setPlayerEventAttendanceRecords([]);
+    setPlayerAttendanceSummary(emptyAttendanceSummary);
   }
 
   if (!token || !mode || (mode === "coach" && !user) || (mode === "player" && !player)) {
@@ -241,6 +258,8 @@ export function App() {
         client={client}
         player={player}
         events={events}
+        attendanceRecords={playerEventAttendanceRecords}
+        attendanceSummary={playerAttendanceSummary}
         error={error}
         onEventsRefresh={refreshPlayerEvents}
         onLogout={logout}
@@ -435,6 +454,8 @@ function PlayerPortal({
   client,
   player,
   events,
+  attendanceRecords,
+  attendanceSummary,
   error,
   onEventsRefresh,
   onLogout,
@@ -443,6 +464,8 @@ function PlayerPortal({
   client: APIClient;
   player: Player;
   events: TeamEvent[];
+  attendanceRecords: PlayerEventAttendanceRecord[];
+  attendanceSummary: AttendanceDecisionSummary;
   error: string;
   onEventsRefresh: () => Promise<void>;
   onLogout: () => void;
@@ -450,12 +473,14 @@ function PlayerPortal({
 }) {
   const today = useMemo(() => new Date(), []);
   const [selectedEventID, setSelectedEventID] = useState(events[0]?.id ?? "");
-  const [status, setStatus] = useState<(typeof playerAttendanceOptions)[number]>("unknown");
+  const [status, setStatus] = useState<PlayerAttendanceStatus>("unknown");
   const [decisionSummary, setDecisionSummary] = useState<AttendanceDecisionSummary>(emptyAttendanceSummary);
   const [refreshingEvents, setRefreshingEvents] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  const statusByEvent = useMemo(() => buildPlayerEventStatusMap(events, attendanceRecords), [events, attendanceRecords]);
+  const splitEvents = useMemo(() => splitEventsByTime(events, today), [events, today]);
   const selectedEvent = events.find((event) => event.id === selectedEventID) ?? events[0];
   const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
 
@@ -468,6 +493,12 @@ function PlayerPortal({
       void loadStatus(selectedEvent.id);
     }
   }, [selectedEvent?.id]);
+
+  useEffect(() => {
+    if (selectedEvent?.id) {
+      setStatus(asPlayerAttendanceStatus(statusByEvent[selectedEvent.id] ?? "unknown"));
+    }
+  }, [selectedEvent?.id, statusByEvent]);
 
   useEffect(() => {
     const refreshSilently = () => {
@@ -506,11 +537,7 @@ function PlayerPortal({
   async function loadStatus(eventID: string) {
     try {
       const result = await client.getPlayerAttendance(eventID);
-      if (playerAttendanceOptions.includes(result.record.status as (typeof playerAttendanceOptions)[number])) {
-        setStatus(result.record.status as (typeof playerAttendanceOptions)[number]);
-      } else {
-        setStatus("unknown");
-      }
+      setStatus(asPlayerAttendanceStatus(result.record.status));
       setDecisionSummary(result.summary);
       onError("");
     } catch (err) {
@@ -524,8 +551,9 @@ function PlayerPortal({
     }
     try {
       const result = await client.savePlayerAttendance(selectedEvent.id, nextStatus);
-      setStatus(result.record.status as (typeof playerAttendanceOptions)[number]);
+      setStatus(asPlayerAttendanceStatus(result.record.status));
       setDecisionSummary(result.summary);
+      await onEventsRefresh();
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -581,16 +609,28 @@ function PlayerPortal({
                       <span className="day-number">{day.dayOfMonth}</span>
                     </button>
                     <span className="day-events">
-                      {dayEvents.slice(0, 2).map((event) => (
-                        <button
-                          className={`event-chip ${event.type} ${selectedEvent?.id === event.id ? "active" : ""}`}
-                          type="button"
-                          key={event.id}
-                          onClick={() => selectEvent(event)}
-                        >
-                          {event.type === "training" ? "训" : "赛"} {event.title}
-                        </button>
-                      ))}
+                      {dayEvents.slice(0, 2).map((event) => {
+                        const eventStatus = statusByEvent[event.id] ?? "unknown";
+                        const statusLabel = calendarEventStatusLabel(eventStatus);
+                        return (
+                          <button
+                            className={`event-chip ${event.type} ${calendarEventStatusClass(eventStatus)} ${
+                              selectedEvent?.id === event.id ? "active" : ""
+                            }`}
+                            type="button"
+                            key={event.id}
+                            onClick={() => selectEvent(event)}
+                            aria-label={`${eventTimeRange(event)} ${event.title}，${statusLabel}`}
+                            title={`${eventTimeRange(event)} ${event.title} · ${statusLabel}`}
+                          >
+                            <span className="event-chip-time">{eventTimeRange(event)}</span>
+                            <span className="event-chip-title">
+                              {event.type === "training" ? "训" : "赛"} {event.title}
+                            </span>
+                            <span className="event-chip-status">{statusLabel}</span>
+                          </button>
+                        );
+                      })}
                       {dayEvents.length > 2 ? <small className="event-chip more">+{dayEvents.length - 2}</small> : null}
                     </span>
                   </div>
@@ -611,6 +651,18 @@ function PlayerPortal({
               >
                 <RefreshCw size={17} />
               </button>
+            </div>
+            <div className="status-overview" aria-label="全部日程总状况">
+              <div className="panel-subheading">
+                <h3>全部日程</h3>
+                <small>{events.length} 场</small>
+              </div>
+              <div className="decision-summary overall-summary">
+                <span className="available">参加 {attendanceSummary.available}</span>
+                <span className="unavailable">拒绝 {attendanceSummary.unavailable}</span>
+                <span className="tentative">待定 {attendanceSummary.tentative}</span>
+                <span>未确认 {attendanceSummary.unknown}</span>
+              </div>
             </div>
             {selectedEvent ? (
               <>
@@ -646,6 +698,38 @@ function PlayerPortal({
                   <Save size={18} />
                   保存状态
                 </button>
+                {splitEvents.past.length > 0 ? (
+                  <section className="past-events-block" aria-label="已结束日程">
+                    <div className="panel-subheading">
+                      <h3>已结束日程</h3>
+                      <small>{splitEvents.past.length} 场</small>
+                    </div>
+                    <div className="past-event-list">
+                      {splitEvents.past.map((event) => {
+                        const eventStatus = statusByEvent[event.id] ?? "unknown";
+                        const statusLabel = calendarEventStatusLabel(eventStatus);
+                        return (
+                          <button
+                            className={`past-event-row ${calendarEventStatusClass(eventStatus)} ${
+                              selectedEvent.id === event.id ? "active" : ""
+                            }`}
+                            type="button"
+                            key={event.id}
+                            onClick={() => selectEvent(event)}
+                          >
+                            <span>
+                              <strong>{event.title}</strong>
+                              <small>
+                                {formatDateRange(event.starts_at, event.ends_at)} · {event.location}
+                              </small>
+                            </span>
+                            <span className="past-event-status">{statusLabel}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
               </>
             ) : (
               <div className="empty-state">暂时还没有训练或友谊赛日程</div>
@@ -1583,6 +1667,10 @@ function NavButton({ active, icon, label, onClick }: { active: boolean; icon: Re
 
 function messageFromError(error: unknown) {
   return error instanceof Error ? error.message : "请求失败";
+}
+
+function asPlayerAttendanceStatus(status: AttendanceStatus): PlayerAttendanceStatus {
+  return playerAttendanceOptions.includes(status as PlayerAttendanceStatus) ? (status as PlayerAttendanceStatus) : "unknown";
 }
 
 function formatDate(value: string) {

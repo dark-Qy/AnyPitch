@@ -16,6 +16,10 @@ export type AttendanceRecord = {
   updated_at: string;
 };
 
+export type PlayerEventAttendanceRecord = AttendanceRecord & {
+  event_id: string;
+};
+
 export type AttendanceDecisionSummary = {
   available: number;
   unavailable: number;
@@ -77,6 +81,81 @@ export function nextSelectedEventID<T extends { id: string }>(currentEventID: st
     return currentEventID;
   }
   return events[0]?.id ?? "";
+}
+
+export function buildPlayerEventStatusMap<T extends { id: string }>(
+  events: T[],
+  records: PlayerEventAttendanceRecord[],
+): Record<string, AttendanceStatus> {
+  const next: Record<string, AttendanceStatus> = {};
+  const eventIDs = new Set<string>();
+  for (const event of events) {
+    eventIDs.add(event.id);
+    next[event.id] = "unknown";
+  }
+  for (const record of records) {
+    if (!eventIDs.has(record.event_id)) {
+      continue;
+    }
+    next[record.event_id] = record.status;
+  }
+  return next;
+}
+
+export function splitEventsByTime<T extends { starts_at: string; ends_at: string }>(events: T[], now = new Date()): { upcoming: T[]; past: T[] } {
+  const upcoming: T[] = [];
+  const past: T[] = [];
+  for (const event of events) {
+    if (new Date(event.ends_at) < now) {
+      past.push(event);
+    } else {
+      upcoming.push(event);
+    }
+  }
+  return {
+    upcoming: [...upcoming].sort((left, right) => new Date(left.starts_at).getTime() - new Date(right.starts_at).getTime()),
+    past: [...past].sort((left, right) => new Date(right.starts_at).getTime() - new Date(left.starts_at).getTime()),
+  };
+}
+
+export function calendarEventStatusClass(status: AttendanceStatus): string {
+  switch (status) {
+    case "available":
+    case "late":
+    case "present":
+      return "status-available";
+    case "unavailable":
+    case "injured":
+    case "absent":
+    case "excused":
+      return "status-unavailable";
+    case "tentative":
+      return "status-tentative";
+    default:
+      return "status-unknown";
+  }
+}
+
+export function calendarEventStatusLabel(status: AttendanceStatus): string {
+  switch (status) {
+    case "available":
+    case "late":
+    case "present":
+      return "参加";
+    case "unavailable":
+    case "injured":
+    case "absent":
+    case "excused":
+      return "拒绝";
+    case "tentative":
+      return "待定";
+    default:
+      return "未确认";
+  }
+}
+
+export function eventTimeRange<T extends { starts_at: string; ends_at: string }>(event: T): string {
+  return `${formatLocalTime(event.starts_at)}-${formatLocalTime(event.ends_at)}`;
 }
 
 export function attendanceSummary(records: AttendanceRecord[]) {
@@ -218,4 +297,9 @@ function opponentMirrorY(sourceY: number) {
 
 function clamp(value: number) {
   return Math.max(4, Math.min(96, Math.round(value * 10) / 10));
+}
+
+function formatLocalTime(value: string): string {
+  const date = new Date(value);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }

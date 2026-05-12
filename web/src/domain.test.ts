@@ -5,12 +5,17 @@ import {
   attendanceSummary,
   buildAttendanceStatusMap,
   buildMonthCalendar,
+  buildPlayerEventStatusMap,
+  calendarEventStatusClass,
+  calendarEventStatusLabel,
+  eventTimeRange,
   groupEventsByDate,
   initialCoachLoginDraft,
   nextSelectedEventID,
   opponentSlotsFromTemplate,
   pitchGeometry,
   positionAfterDragDelta,
+  splitEventsByTime,
   templatesForFormat,
   normalizeSlotPosition,
 } from "./domain";
@@ -139,6 +144,48 @@ describe("groupEventsByDate", () => {
 
     expect(grouped["2026-05-13"]).toHaveLength(2);
     expect(grouped["2026-05-16"][0].title).toBe("友谊赛");
+  });
+});
+
+describe("player event attendance helpers", () => {
+  const events = [
+    { id: "past", starts_at: "2026-05-01T20:00:00+08:00", ends_at: "2026-05-01T22:00:00+08:00" },
+    { id: "future", starts_at: "2026-05-13T20:30:00+08:00", ends_at: "2026-05-13T22:00:00+08:00" },
+    { id: "unknown", starts_at: "2026-05-16T18:00:00+08:00", ends_at: "2026-05-16T20:00:00+08:00" },
+  ];
+
+  it("maps every event to the current player's status and defaults missing records to unknown", () => {
+    const statusByEvent = buildPlayerEventStatusMap(events, [
+      { event_id: "past", player_id: "p1", status: "available", note: "", updated_at: "" },
+      { event_id: "future", player_id: "p1", status: "tentative", note: "", updated_at: "" },
+      { event_id: "outside", player_id: "p1", status: "unavailable", note: "", updated_at: "" },
+    ]);
+
+    expect(statusByEvent).toEqual({
+      past: "available",
+      future: "tentative",
+      unknown: "unknown",
+    });
+  });
+
+  it("separates upcoming events from finished events without mutating source order", () => {
+    const split = splitEventsByTime(events, new Date("2026-05-12T12:00:00+08:00"));
+
+    expect(split.upcoming.map((event) => event.id)).toEqual(["future", "unknown"]);
+    expect(split.past.map((event) => event.id)).toEqual(["past"]);
+    expect(events.map((event) => event.id)).toEqual(["past", "future", "unknown"]);
+  });
+
+  it("exposes stable calendar status classes and labels", () => {
+    expect(calendarEventStatusClass("available")).toBe("status-available");
+    expect(calendarEventStatusClass("unavailable")).toBe("status-unavailable");
+    expect(calendarEventStatusClass("tentative")).toBe("status-tentative");
+    expect(calendarEventStatusClass("unknown")).toBe("status-unknown");
+    expect(calendarEventStatusLabel("tentative")).toBe("待定");
+  });
+
+  it("formats event time ranges for compact calendar chips", () => {
+    expect(eventTimeRange(events[1])).toBe("20:30-22:00");
   });
 });
 

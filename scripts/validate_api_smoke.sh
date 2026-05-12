@@ -123,9 +123,15 @@ PLAYER_TOKEN="$(json_get "${SMOKE_DIR}/player-login.json" data.token)"
 [[ "$(json_get "${SMOKE_DIR}/player-login.json" data.player.name)" == "林海" ]]
 api GET /api/player/events "${PLAYER_TOKEN}" "" "${SMOKE_DIR}/player-events.json"
 [[ "$(json_get "${SMOKE_DIR}/player-events.json" data.events.0.title)" == "周三控球训练" ]]
+[[ "$(json_get "${SMOKE_DIR}/player-events.json" data.attendance_records.0.status)" == "available" ]]
+[[ "$(json_get "${SMOKE_DIR}/player-events.json" data.attendance_summary.available)" == "1" ]]
+[[ "$(json_get "${SMOKE_DIR}/player-events.json" data.attendance_summary.unknown)" == "1" ]]
 api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status":"tentative"}' "${SMOKE_DIR}/player-attendance.json"
 [[ "$(json_get "${SMOKE_DIR}/player-attendance.json" data.record.status)" == "tentative" ]]
 [[ "$(json_get "${SMOKE_DIR}/player-attendance.json" data.summary.tentative)" == "1" ]]
+api GET /api/player/events "${PLAYER_TOKEN}" "" "${SMOKE_DIR}/player-events-updated.json"
+[[ "$(json_get "${SMOKE_DIR}/player-events-updated.json" data.attendance_records.0.status)" == "tentative" ]]
+[[ "$(json_get "${SMOKE_DIR}/player-events-updated.json" data.attendance_summary.tentative)" == "1" ]]
 
 echo "==> tactic templates"
 api GET /api/tactics/templates "${TOKEN}" "" "${SMOKE_DIR}/templates.json"
