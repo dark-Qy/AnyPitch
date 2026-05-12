@@ -46,7 +46,11 @@ export type CalendarDay = {
 };
 
 export function initialCoachLoginDraft() {
-  return { email: "", password: "" };
+  return { password: "" };
+}
+
+export function activeRosterPlayers<T extends { status?: string }>(players: T[]): T[] {
+  return players.filter((player) => player.status !== "inactive");
 }
 
 export function buildAttendanceStatusMap<T extends { id: string }>(
@@ -54,13 +58,25 @@ export function buildAttendanceStatusMap<T extends { id: string }>(
   records: AttendanceRecord[],
 ): Record<string, AttendanceStatus> {
   const next: Record<string, AttendanceStatus> = {};
+  const playerIDs = new Set<string>();
   for (const player of players) {
+    playerIDs.add(player.id);
     next[player.id] = "unknown";
   }
   for (const record of records) {
+    if (!playerIDs.has(record.player_id)) {
+      continue;
+    }
     next[record.player_id] = record.status;
   }
   return next;
+}
+
+export function nextSelectedEventID<T extends { id: string }>(currentEventID: string, events: T[]): string {
+  if (currentEventID && events.some((event) => event.id === currentEventID)) {
+    return currentEventID;
+  }
+  return events[0]?.id ?? "";
 }
 
 export function attendanceSummary(records: AttendanceRecord[]) {

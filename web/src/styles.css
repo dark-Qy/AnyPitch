@@ -388,6 +388,13 @@ p {
   border-bottom: 2px solid var(--line-soft);
 }
 
+.panel-heading.with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .panel-heading h2 {
   margin-bottom: 0;
   font-size: 24px;

@@ -92,10 +92,10 @@ export class APIClient {
     this.token = token;
   }
 
-  login(email: string, password: string) {
+  login(password: string) {
     return this.request<Session>("/api/auth/login", {
       method: "POST",
-      body: { email, password },
+      body: { password },
     });
   }
 

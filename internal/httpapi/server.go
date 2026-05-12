@@ -131,13 +131,12 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	session, err := h.auth.Login(input.Email, input.Password)
+	session, err := h.auth.Login(input.Password)
 	if err != nil {
 		handleAuthError(w, err)
 		return
@@ -531,7 +530,10 @@ func (h *Handler) withAuth(next func(http.ResponseWriter, *http.Request, request
 			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
 			return
 		}
-		teamID, err := h.ensureDefaultTeam(user.ID)
+		teamID, err := h.defaultTeamID(user.ID)
+		if errors.Is(err, sql.ErrNoRows) {
+			teamID, err = h.ensureDefaultTeam(user.ID)
+		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to load team workspace.")
 			return
@@ -590,6 +592,12 @@ func (h *Handler) ensureDefaultTeam(userID string) (string, error) {
 	return teamID, nil
 }
 
+func (h *Handler) defaultTeamID(userID string) (string, error) {
+	var teamID string
+	err := h.db.QueryRow(`SELECT id FROM teams WHERE user_id = ? ORDER BY created_at LIMIT 1`, userID).Scan(&teamID)
+	return teamID, err
+}
+
 func bearerToken(r *http.Request) string {
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(header, "Bearer ") {
@@ -609,7 +617,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
 func handleAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrInvalidCredentials):
-		writeError(w, http.StatusBadRequest, "invalid_credentials", "Email or password is invalid.")
+		writeError(w, http.StatusBadRequest, "invalid_credentials", "Password is invalid.")
 	default:
 		writeError(w, http.StatusInternalServerError, "internal_error", "Authentication failed.")
 	}

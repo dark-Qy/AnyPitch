@@ -110,8 +110,8 @@ func (s *Service) EnsureDefaultCoach() (User, error) {
 	return user, nil
 }
 
-func (s *Service) Login(email, password string) (Session, error) {
-	email = normalizeEmail(email)
+func (s *Service) Login(password string) (Session, error) {
+	email := normalizeEmail(DefaultCoachEmail)
 	user, passwordHash, err := s.userWithPasswordByEmail(email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, ErrInvalidCredentials

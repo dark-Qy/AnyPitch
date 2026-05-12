@@ -78,7 +78,7 @@ api GET /api/healthz "" "" "${SMOKE_DIR}/health.json"
 [[ "$(json_get "${SMOKE_DIR}/health.json" data.ok)" == "true" ]]
 
 echo "==> login"
-LOGIN_BODY="$(COACH_PASSWORD="${COACH_PASSWORD}" node -e 'console.log(JSON.stringify({email:"coach@anypitch.local", password:process.env.COACH_PASSWORD}))')"
+LOGIN_BODY="$(COACH_PASSWORD="${COACH_PASSWORD}" node -e 'console.log(JSON.stringify({password:process.env.COACH_PASSWORD}))')"
 api POST /api/auth/login "" "${LOGIN_BODY}" "${SMOKE_DIR}/login.json"
 TOKEN="$(json_get "${SMOKE_DIR}/login.json" data.token)"
 [[ -n "${TOKEN}" ]]

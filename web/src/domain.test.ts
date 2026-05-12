@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeRosterPlayers,
   attendanceDecisionSummary,
   attendanceSummary,
   buildAttendanceStatusMap,
   buildMonthCalendar,
   groupEventsByDate,
   initialCoachLoginDraft,
+  nextSelectedEventID,
   opponentSlotsFromTemplate,
   pitchGeometry,
   positionAfterDragDelta,
@@ -42,6 +44,17 @@ describe("attendanceDecisionSummary", () => {
   });
 });
 
+describe("activeRosterPlayers", () => {
+  it("keeps inactive players out of attendance totals", () => {
+    const players = activeRosterPlayers([
+      { id: "p1", name: "林海", status: "active" },
+      { id: "p2", name: "周舟", status: "inactive" },
+    ]);
+
+    expect(players.map((player) => player.id)).toEqual(["p1"]);
+  });
+});
+
 describe("buildAttendanceStatusMap", () => {
   it("fills every scheduled player and overlays saved records", () => {
     const records = buildAttendanceStatusMap(
@@ -54,11 +67,35 @@ describe("buildAttendanceStatusMap", () => {
 
     expect(records).toEqual({ p1: "unknown", p2: "late" });
   });
+
+  it("ignores saved records for players outside the current attendance roster", () => {
+    const records = buildAttendanceStatusMap(
+      [{ id: "p1", name: "林海" }],
+      [
+        { player_id: "p1", status: "available", note: "", updated_at: "" },
+        { player_id: "p2", status: "late", note: "", updated_at: "" },
+      ],
+    );
+
+    expect(records).toEqual({ p1: "available" });
+  });
+});
+
+describe("nextSelectedEventID", () => {
+  const events = [{ id: "e1" }, { id: "e2" }];
+
+  it("keeps the current event when it still exists after a refresh", () => {
+    expect(nextSelectedEventID("e2", events)).toBe("e2");
+  });
+
+  it("selects the first refreshed event when the current event is missing", () => {
+    expect(nextSelectedEventID("stale", events)).toBe("e1");
+  });
 });
 
 describe("initialCoachLoginDraft", () => {
-  it("does not prefill coach credentials", () => {
-    expect(initialCoachLoginDraft()).toEqual({ email: "", password: "" });
+  it("only keeps an empty coach password draft", () => {
+    expect(initialCoachLoginDraft()).toEqual({ password: "" });
   });
 });
 
