@@ -22,6 +22,11 @@ export type Player = {
   updated_at: string;
 };
 
+export type PlayerSession = {
+  token: string;
+  player: Player;
+};
+
 export type TeamEvent = {
   id: string;
   type: "training" | "friendly";
@@ -94,12 +99,27 @@ export class APIClient {
     });
   }
 
+  playerLogin(name: string) {
+    return this.request<PlayerSession>("/api/player/login", {
+      method: "POST",
+      body: { name },
+    });
+  }
+
   logout() {
     return this.request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
   }
 
+  playerLogout() {
+    return this.request<{ ok: boolean }>("/api/player/logout", { method: "POST" });
+  }
+
   me() {
     return this.request<{ user: User; team_id: string }>("/api/auth/me");
+  }
+
+  playerMe() {
+    return this.request<{ player: Player }>("/api/player/me");
   }
 
   listPlayers() {
@@ -113,8 +133,23 @@ export class APIClient {
     });
   }
 
+  updatePlayer(playerID: string, input: { name?: string; number?: number | null; positions?: string[]; status?: "active" | "inactive" }) {
+    return this.request<{ player: Player }>(`/api/players/${playerID}`, {
+      method: "PATCH",
+      body: input,
+    });
+  }
+
+  deletePlayer(playerID: string) {
+    return this.request<{ ok: boolean }>(`/api/players/${playerID}`, { method: "DELETE" });
+  }
+
   listEvents() {
     return this.request<{ events: TeamEvent[] }>("/api/events");
+  }
+
+  listPlayerEvents() {
+    return this.request<{ events: TeamEvent[] }>("/api/player/events");
   }
 
   listLocations() {
@@ -155,6 +190,17 @@ export class APIClient {
     return this.request<{ records: AttendanceRecord[] }>(`/api/events/${eventID}/attendance`, {
       method: "PUT",
       body: { records },
+    });
+  }
+
+  getPlayerAttendance(eventID: string) {
+    return this.request<{ record: AttendanceRecord }>(`/api/player/events/${eventID}/attendance`);
+  }
+
+  savePlayerAttendance(eventID: string, status: "unknown" | "available" | "unavailable") {
+    return this.request<{ record: AttendanceRecord }>(`/api/player/events/${eventID}/attendance`, {
+      method: "PUT",
+      body: { status },
     });
   }
 

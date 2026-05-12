@@ -123,6 +123,121 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 	assertStatus(t, logout, http.StatusOK)
 }
 
+func TestPlayerCanLoginByNameAndOnlyManageOwnAttendance(t *testing.T) {
+	handler := newTestHandler(t)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"email":    "coach@anypitch.local",
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	coachToken := jsonPath(t, login, "data.token").(string)
+
+	player := performJSONRequest(t, handler, http.MethodPost, "/api/players", coachToken, map[string]any{
+		"name":      "林海",
+		"number":    10,
+		"positions": []string{"前腰", "前锋"},
+	})
+	assertStatus(t, player, http.StatusOK)
+	playerID := jsonPath(t, player, "data.player.id").(string)
+
+	otherPlayer := performJSONRequest(t, handler, http.MethodPost, "/api/players", coachToken, map[string]any{
+		"name":      "周舟",
+		"number":    7,
+		"positions": []string{"边锋"},
+	})
+	assertStatus(t, otherPlayer, http.StatusOK)
+
+	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
+		"type":      "training",
+		"title":     "周三控球训练",
+		"starts_at": "2026-05-13T20:00:00+08:00",
+	})
+	assertStatus(t, training, http.StatusOK)
+	eventID := jsonPath(t, training, "data.event.id").(string)
+
+	playerLogin := performJSONRequest(t, handler, http.MethodPost, "/api/player/login", "", map[string]any{
+		"name": "林海",
+	})
+	assertStatus(t, playerLogin, http.StatusOK)
+	playerToken := jsonPath(t, playerLogin, "data.token").(string)
+	assertJSONEquals(t, playerLogin, "data.player.id", playerID)
+
+	playerMe := performJSONRequest(t, handler, http.MethodGet, "/api/player/me", playerToken, nil)
+	assertStatus(t, playerMe, http.StatusOK)
+	assertJSONEquals(t, playerMe, "data.player.name", "林海")
+
+	events := performJSONRequest(t, handler, http.MethodGet, "/api/player/events", playerToken, nil)
+	assertStatus(t, events, http.StatusOK)
+	assertJSONEquals(t, events, "data.events.0.title", "周三控球训练")
+
+	status := performJSONRequest(t, handler, http.MethodPut, "/api/player/events/"+eventID+"/attendance", playerToken, map[string]any{
+		"status": "available",
+	})
+	assertStatus(t, status, http.StatusOK)
+	assertJSONEquals(t, status, "data.record.player_id", playerID)
+	assertJSONEquals(t, status, "data.record.status", "available")
+
+	ownStatus := performJSONRequest(t, handler, http.MethodGet, "/api/player/events/"+eventID+"/attendance", playerToken, nil)
+	assertStatus(t, ownStatus, http.StatusOK)
+	assertJSONEquals(t, ownStatus, "data.record.status", "available")
+
+	forbidden := performJSONRequest(t, handler, http.MethodGet, "/api/players", playerToken, nil)
+	assertStatus(t, forbidden, http.StatusUnauthorized)
+}
+
+func TestDefaultCoachPasswordCanComeFromEnvironment(t *testing.T) {
+	t.Setenv("ANYPITCH_COACH_PASSWORD", "CoachSecret@2026")
+	handler := newTestHandler(t)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"email":    "coach@anypitch.local",
+		"password": "CoachSecret@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	if jsonPath(t, login, "data.token").(string) == "" {
+		t.Fatal("expected login token")
+	}
+}
+
+func TestDefaultCoachEnvironmentPasswordRotatesExistingCoach(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "anypitch-test.db")
+	conn, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
+
+	handler, err := httpapi.NewHandler(conn)
+	if err != nil {
+		t.Fatalf("new handler: %v", err)
+	}
+	oldLogin := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"email":    "coach@anypitch.local",
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, oldLogin, http.StatusOK)
+
+	t.Setenv("ANYPITCH_COACH_PASSWORD", "RotatedCoach@2026")
+	handler, err = httpapi.NewHandler(conn)
+	if err != nil {
+		t.Fatalf("new handler after rotation: %v", err)
+	}
+	newLogin := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"email":    "coach@anypitch.local",
+		"password": "RotatedCoach@2026",
+	})
+	assertStatus(t, newLogin, http.StatusOK)
+
+	staleLogin := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"email":    "coach@anypitch.local",
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, staleLogin, http.StatusBadRequest)
+}
+
 func newTestHandler(t *testing.T) http.Handler {
 	t.Helper()
 

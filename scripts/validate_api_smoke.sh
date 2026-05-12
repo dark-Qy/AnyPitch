@@ -8,6 +8,7 @@ BASE_URL="http://127.0.0.1:${PORT}"
 SMOKE_DIR="${ROOT_DIR}/data/smoke"
 DB_PATH="${SMOKE_DIR}/anypitch-smoke.db"
 SERVER_LOG="${SMOKE_DIR}/server.log"
+COACH_PASSWORD="${ANYPITCH_COACH_PASSWORD:-AnyPitch@2026}"
 
 rm -rf "${SMOKE_DIR}"
 mkdir -p "${SMOKE_DIR}"
@@ -77,7 +78,8 @@ api GET /api/healthz "" "" "${SMOKE_DIR}/health.json"
 [[ "$(json_get "${SMOKE_DIR}/health.json" data.ok)" == "true" ]]
 
 echo "==> login"
-api POST /api/auth/login "" '{"email":"coach@anypitch.local","password":"AnyPitch@2026"}' "${SMOKE_DIR}/login.json"
+LOGIN_BODY="$(COACH_PASSWORD="${COACH_PASSWORD}" node -e 'console.log(JSON.stringify({email:"coach@anypitch.local", password:process.env.COACH_PASSWORD}))')"
+api POST /api/auth/login "" "${LOGIN_BODY}" "${SMOKE_DIR}/login.json"
 TOKEN="$(json_get "${SMOKE_DIR}/login.json" data.token)"
 [[ -n "${TOKEN}" ]]
 
@@ -111,6 +113,16 @@ api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","s
 echo "==> attendance"
 api PUT "/api/events/${EVENT_ID}/attendance" "${TOKEN}" "{\"records\":[{\"player_id\":\"${PLAYER_ID}\",\"status\":\"available\",\"note\":\"准时\"}]}" "${SMOKE_DIR}/attendance.json"
 [[ "$(json_get "${SMOKE_DIR}/attendance.json" data.records.0.status)" == "available" ]]
+
+echo "==> player self service"
+api POST /api/player/login "" '{"name":"林海"}' "${SMOKE_DIR}/player-login.json"
+PLAYER_TOKEN="$(json_get "${SMOKE_DIR}/player-login.json" data.token)"
+[[ -n "${PLAYER_TOKEN}" ]]
+[[ "$(json_get "${SMOKE_DIR}/player-login.json" data.player.name)" == "林海" ]]
+api GET /api/player/events "${PLAYER_TOKEN}" "" "${SMOKE_DIR}/player-events.json"
+[[ "$(json_get "${SMOKE_DIR}/player-events.json" data.events.0.title)" == "周三控球训练" ]]
+api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status":"unavailable"}' "${SMOKE_DIR}/player-attendance.json"
+[[ "$(json_get "${SMOKE_DIR}/player-attendance.json" data.record.status)" == "unavailable" ]]
 
 echo "==> tactic templates"
 api GET /api/tactics/templates "${TOKEN}" "" "${SMOKE_DIR}/templates.json"

@@ -7,8 +7,8 @@
 ## Stable Layers
 
 - 服务入口层：`cmd/server/` 负责启动、读取 `APP_DB_PATH` / `HTTP_ADDR` 并装配 HTTP handler
-- SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`teams`、`players`、`events`、`event_locations`、`attendance_records`、`tactic_boards`
-- 鉴权层：`internal/auth/` 负责默认教练初始化、登录、session 创建、Bearer token 校验和登出
+- SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`player_sessions`、`teams`、`players`、`events`、`event_locations`、`attendance_records`、`tactic_boards`
+- 鉴权层：`internal/auth/` 负责默认教练初始化、环境变量密码、教练登录、队员姓名登录、session 创建、Bearer token 校验和登出
 - 队员层：`internal/player/` 负责队员 CRUD 和位置标签归一化
 - 日程层：`internal/event/` 负责 `training` / `friendly` 日程、开始/结束时间段和常用地点
 - 出勤层：`internal/attendance/` 负责事件维度的队员出勤状态
@@ -21,6 +21,7 @@
 - 客户端不直接读写 SQLite
 - 公共 API 使用统一 envelope：成功 `{data}`，失败 `{error:{code,message}}`
 - 第一版数据隔离以登录教练的默认 team 为边界
+- 教练接口必须使用教练 session；队员 session 只能访问 `/api/player/*` 自助接口
 - 手机端是响应式 Web，不引入 PWA、service worker 或原生壳
 - 新增公共字段或 schema 变更需同步 README、ARCHITECTURE、FRONTEND、相关 product spec 和 CHANGELOG
 
@@ -35,3 +36,10 @@
 - `events.starts_at` 和 `events.ends_at` 共同表达训练或友谊赛时间段，旧数据缺少结束时间时按开始后两小时兜底
 - `events.location` 未填写时使用 `北京邮电大学（海淀校区）`
 - `event_locations` 保存当前 team 的常用地点，启动时确保默认地点存在
+
+## Auth Schema
+
+- 默认教练邮箱固定为 `coach@anypitch.local`
+- 默认教练密码优先读取 `ANYPITCH_COACH_PASSWORD`，未设置时使用 `AnyPitch@2026`
+- 启动时如果默认教练已存在，也会把密码哈希同步到当前环境变量值
+- 队员 session 存在 `player_sessions`，只绑定 `team_id` 和 `player_id`

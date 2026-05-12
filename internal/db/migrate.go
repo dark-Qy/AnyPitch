@@ -18,6 +18,13 @@ func Migrate(conn *sql.DB) error {
 			created_at TEXT NOT NULL,
 			expires_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS player_sessions (
+			token TEXT PRIMARY KEY,
+			team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+			player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS teams (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

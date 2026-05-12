@@ -99,6 +99,67 @@ func (s *Service) Replace(teamID, eventID string, input ReplaceInput) ([]Record,
 	return records, nil
 }
 
+func (s *Service) GetForPlayer(teamID, eventID, playerID string) (Record, error) {
+	if err := s.ensureEvent(teamID, eventID); err != nil {
+		return Record{}, err
+	}
+	var record Record
+	err := s.db.QueryRow(
+		`SELECT a.player_id, a.status, a.note, a.updated_at
+		 FROM attendance_records a
+		 JOIN players p ON p.id = a.player_id
+		 WHERE a.event_id = ? AND a.player_id = ? AND p.team_id = ?`,
+		eventID,
+		playerID,
+		teamID,
+	).Scan(&record.PlayerID, &record.Status, &record.Note, &record.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Record{PlayerID: playerID, Status: "unknown", Note: "", UpdatedAt: ""}, nil
+	}
+	if err != nil {
+		return Record{}, err
+	}
+	return record, nil
+}
+
+func (s *Service) SaveForPlayer(teamID, eventID, playerID, status string) (Record, error) {
+	if !validPlayerStatus(status) {
+		return Record{}, ErrInvalidAttendance
+	}
+	if err := s.ensureEvent(teamID, eventID); err != nil {
+		return Record{}, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return Record{}, err
+	}
+	defer tx.Rollback()
+	if err := ensurePlayer(tx, teamID, playerID); err != nil {
+		return Record{}, err
+	}
+	record := Record{PlayerID: playerID, Status: status, Note: "", UpdatedAt: nowISO()}
+	_, err = tx.Exec(
+		`INSERT INTO attendance_records (event_id, player_id, status, note, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(event_id, player_id) DO UPDATE SET
+		 status = excluded.status,
+		 note = excluded.note,
+		 updated_at = excluded.updated_at`,
+		eventID,
+		record.PlayerID,
+		record.Status,
+		record.Note,
+		record.UpdatedAt,
+	)
+	if err != nil {
+		return Record{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Record{}, err
+	}
+	return record, nil
+}
+
 func (s *Service) ensureEvent(teamID, eventID string) error {
 	var exists int
 	err := s.db.QueryRow(`SELECT 1 FROM events WHERE id = ? AND team_id = ?`, eventID, teamID).Scan(&exists)
@@ -120,6 +181,15 @@ func ensurePlayer(tx *sql.Tx, teamID, playerID string) error {
 func validStatus(status string) bool {
 	switch status {
 	case "unknown", "available", "unavailable", "late", "injured", "present", "absent", "excused":
+		return true
+	default:
+		return false
+	}
+}
+
+func validPlayerStatus(status string) bool {
+	switch status {
+	case "unknown", "available", "unavailable":
 		return true
 	default:
 		return false

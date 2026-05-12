@@ -218,6 +218,28 @@ p {
   padding: 18px;
 }
 
+.login-form-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.role-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.role-switch button {
+  color: var(--ink);
+  background: var(--paper-deep);
+}
+
+.role-switch button.active {
+  color: var(--paper);
+  background: var(--ink);
+  box-shadow: 4px 4px 0 var(--signal-green);
+}
+
 .login-note {
   display: grid;
   gap: 4px;
@@ -225,6 +247,10 @@ p {
   border: 2px solid var(--ink);
   border-radius: 6px;
   background: rgba(24, 160, 108, 0.08);
+}
+
+.login-note.player-note {
+  background: rgba(210, 138, 21, 0.12);
 }
 
 .login-note span {
@@ -324,6 +350,10 @@ p {
 
 .tactics-grid {
   grid-template-columns: minmax(300px, 0.32fr) minmax(460px, 1fr);
+}
+
+.player-portal-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.34fr);
 }
 
 .tool-panel,
@@ -668,6 +698,10 @@ p {
   transform: none;
 }
 
+.day-pick.readonly {
+  cursor: default;
+}
+
 .day-cell.muted {
   color: rgba(22, 21, 18, 0.46);
   background: rgba(211, 197, 171, 0.62);
@@ -776,6 +810,20 @@ button.event-chip:focus-visible {
   padding: 12px;
 }
 
+.row-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.player-edit-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) minmax(72px, 0.5fr) minmax(160px, 1.4fr) minmax(92px, 0.7fr) 86px 86px;
+  gap: 8px;
+  align-items: center;
+}
+
 .player-row strong {
   width: 48px;
   height: 48px;
@@ -785,6 +833,40 @@ button.event-chip:focus-visible {
   border-radius: 6px;
   background: var(--ink);
   color: var(--paper);
+}
+
+.event-card {
+  display: grid;
+  gap: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  padding: 14px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.event-card small {
+  color: var(--muted);
+  font-family: "SFMono-Regular", "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+
+.status-choice {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.status-choice button {
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--ink);
+  background: var(--paper-deep);
+}
+
+.status-choice button.active {
+  color: var(--paper);
+  background: var(--signal-green);
+  box-shadow: 4px 4px 0 var(--ink);
 }
 
 .event-type {
@@ -876,7 +958,8 @@ button.event-chip:focus-visible {
   .auth-card,
   .side-rail,
   .panel-grid,
-  .tactics-grid {
+  .tactics-grid,
+  .player-portal-grid {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -924,8 +1007,15 @@ button.event-chip:focus-visible {
 
   .brand-lockup span,
   .nav-button span,
-  .rail-logout {
+  .rail-logout span {
     display: none;
+  }
+
+  .rail-logout {
+    width: 56px;
+    justify-content: center;
+    justify-self: end;
+    padding: 0;
   }
 
   .nav-stack {
@@ -991,6 +1081,15 @@ button.event-chip:focus-visible {
 
   .attendance-row {
     display: grid;
+  }
+
+  .row-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .player-edit-row {
+    grid-template-columns: 1fr;
   }
 
   .attendance-row select {

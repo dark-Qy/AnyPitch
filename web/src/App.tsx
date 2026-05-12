@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Pencil,
   LayoutDashboard,
   LogOut,
   Plus,
@@ -50,6 +51,7 @@ import {
 } from "./domain";
 
 const tokenKey = "anypitch_token";
+const playerTokenKey = "anypitch_player_token";
 const defaultLocationName = "北京邮电大学（海淀校区）";
 const attendanceOptions: AttendanceStatus[] = [
   "unknown",
@@ -71,13 +73,19 @@ const attendanceLabels: Record<AttendanceStatus, string> = {
   absent: "缺席",
   excused: "请假",
 };
+const playerAttendanceOptions = ["unknown", "available", "unavailable"] as const;
 
 type View = "tactics" | "players" | "calendar" | "attendance";
+type SessionMode = "coach" | "player";
 
 export function App() {
-  const [client] = useState(() => new APIClient(localStorage.getItem(tokenKey)));
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(tokenKey));
+  const initialPlayerToken = localStorage.getItem(playerTokenKey);
+  const initialCoachToken = localStorage.getItem(tokenKey);
+  const [client] = useState(() => new APIClient(initialPlayerToken ?? initialCoachToken));
+  const [mode, setMode] = useState<SessionMode | null>(() => (initialPlayerToken ? "player" : initialCoachToken ? "coach" : null));
+  const [token, setToken] = useState<string | null>(() => initialPlayerToken ?? initialCoachToken);
   const [user, setUser] = useState<User | null>(null);
+  const [player, setPlayer] = useState<Player | null>(null);
   const [view, setView] = useState<View>("tactics");
   const [players, setPlayers] = useState<Player[]>([]);
   const [events, setEvents] = useState<TeamEvent[]>([]);
@@ -89,12 +97,15 @@ export function App() {
 
   useEffect(() => {
     client.setToken(token);
-    if (token) {
-      void bootstrap();
+    if (token && mode === "coach") {
+      void bootstrapCoach();
     }
-  }, [token]);
+    if (token && mode === "player") {
+      void bootstrapPlayer();
+    }
+  }, [mode, token]);
 
-  async function bootstrap() {
+  async function bootstrapCoach() {
     setBusy(true);
     setError("");
     try {
@@ -107,6 +118,7 @@ export function App() {
         client.listBoards(),
       ]);
       setUser(me.user);
+      setPlayer(null);
       setPlayers(playerResult.players);
       setEvents(eventResult.events);
       setLocations(locationResult.locations);
@@ -115,31 +127,84 @@ export function App() {
     } catch (err) {
       setError(messageFromError(err));
       setToken(null);
+      setMode(null);
       localStorage.removeItem(tokenKey);
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleAuthenticated(sessionToken: string, nextUser: User) {
+  async function bootstrapPlayer() {
+    setBusy(true);
+    setError("");
+    try {
+      const [me, eventResult] = await Promise.all([client.playerMe(), client.listPlayerEvents()]);
+      setPlayer(me.player);
+      setUser(null);
+      setEvents(eventResult.events);
+    } catch (err) {
+      setError(messageFromError(err));
+      setToken(null);
+      setMode(null);
+      localStorage.removeItem(playerTokenKey);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCoachAuthenticated(sessionToken: string, nextUser: User) {
+    client.setToken(sessionToken);
     localStorage.setItem(tokenKey, sessionToken);
+    localStorage.removeItem(playerTokenKey);
+    setMode("coach");
     setToken(sessionToken);
     setUser(nextUser);
+    setPlayer(null);
+  }
+
+  async function handlePlayerAuthenticated(sessionToken: string, nextPlayer: Player) {
+    client.setToken(sessionToken);
+    localStorage.setItem(playerTokenKey, sessionToken);
+    localStorage.removeItem(tokenKey);
+    setMode("player");
+    setToken(sessionToken);
+    setPlayer(nextPlayer);
+    setUser(null);
   }
 
   async function logout() {
     try {
-      await client.logout();
+      if (mode === "player") {
+        await client.playerLogout();
+      } else {
+        await client.logout();
+      }
     } catch {
       // Local logout remains useful when the session already expired.
     }
     localStorage.removeItem(tokenKey);
+    localStorage.removeItem(playerTokenKey);
+    client.setToken(null);
     setToken(null);
+    setMode(null);
     setUser(null);
+    setPlayer(null);
   }
 
-  if (!token || !user) {
-    return <AuthGateway client={client} busy={busy} error={error} onAuthenticated={handleAuthenticated} />;
+  if (!token || !mode || (mode === "coach" && !user) || (mode === "player" && !player)) {
+    return (
+      <AuthGateway
+        client={client}
+        busy={busy}
+        error={error}
+        onCoachAuthenticated={handleCoachAuthenticated}
+        onPlayerAuthenticated={handlePlayerAuthenticated}
+      />
+    );
+  }
+
+  if (mode === "player" && player) {
+    return <PlayerPortal client={client} player={player} events={events} error={error} onLogout={logout} onError={setError} />;
   }
 
   return (
@@ -203,25 +268,43 @@ function AuthGateway({
   client,
   busy,
   error,
-  onAuthenticated,
+  onCoachAuthenticated,
+  onPlayerAuthenticated,
 }: {
   client: APIClient;
   busy: boolean;
   error: string;
-  onAuthenticated: (token: string, user: User) => void;
+  onCoachAuthenticated: (token: string, user: User) => void;
+  onPlayerAuthenticated: (token: string, player: Player) => void;
 }) {
+  const [entry, setEntry] = useState<SessionMode>("coach");
   const [email, setEmail] = useState("coach@anypitch.local");
   const [password, setPassword] = useState("AnyPitch@2026");
+  const [playerName, setPlayerName] = useState("");
   const [localError, setLocalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function submit(event: FormEvent) {
+  async function submitCoach(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
     setLocalError("");
     try {
       const session = await client.login(email, password);
-      onAuthenticated(session.token, session.user);
+      onCoachAuthenticated(session.token, session.user);
+    } catch (err) {
+      setLocalError(messageFromError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitPlayer(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setLocalError("");
+    try {
+      const session = await client.playerLogin(playerName);
+      onPlayerAuthenticated(session.token, session.player);
     } catch (err) {
       setLocalError(messageFromError(err));
     } finally {
@@ -237,27 +320,243 @@ function AuthGateway({
           <p>AnyPitch</p>
           <h1>单队教练工作台</h1>
         </div>
-        <form className="auth-form" onSubmit={submit}>
-          <div className="login-note">
-            <strong>默认教练账号</strong>
-            <span>coach@anypitch.local / AnyPitch@2026</span>
+        <div className="auth-form">
+          <div className="role-switch" role="tablist" aria-label="选择入口">
+            <button
+              className={entry === "coach" ? "active" : ""}
+              type="button"
+              onClick={() => {
+                setEntry("coach");
+                setLocalError("");
+              }}
+            >
+              教练
+            </button>
+            <button
+              className={entry === "player" ? "active" : ""}
+              type="button"
+              onClick={() => {
+                setEntry("player");
+                setLocalError("");
+              }}
+            >
+              队员
+            </button>
           </div>
-          <label>
-            邮箱
-            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
-          </label>
-          <label>
-            密码
-            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
-          </label>
-          {localError || error ? <div className="error-banner compact">{localError || error}</div> : null}
-          <button className="primary-button" disabled={submitting || busy} type="submit">
-            <ShieldCheck size={18} />
-            登录
-          </button>
-        </form>
+          {entry === "coach" ? (
+            <form className="login-form-stack" onSubmit={submitCoach}>
+              <div className="login-note">
+                <strong>教练登录</strong>
+                <span>默认密码可由 ANYPITCH_COACH_PASSWORD 覆盖</span>
+              </div>
+              <label>
+                邮箱
+                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
+              </label>
+              <label>
+                密码
+                <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
+              </label>
+              {localError || error ? <div className="error-banner compact">{localError || error}</div> : null}
+              <button className="primary-button" disabled={submitting || busy} type="submit">
+                <ShieldCheck size={18} />
+                登录教练工作台
+              </button>
+            </form>
+          ) : (
+            <form className="login-form-stack" onSubmit={submitPlayer}>
+              <div className="login-note player-note">
+                <strong>队员入口</strong>
+                <span>输入教练已添加的队员姓名，无需密码</span>
+              </div>
+              <label>
+                姓名
+                <input value={playerName} onChange={(event) => setPlayerName(event.target.value)} placeholder="例如 林海" autoComplete="name" />
+              </label>
+              {localError || error ? <div className="error-banner compact">{localError || error}</div> : null}
+              <button className="primary-button" disabled={submitting || busy} type="submit">
+                <Users size={18} />
+                进入队员日程
+              </button>
+            </form>
+          )}
+        </div>
       </section>
     </main>
+  );
+}
+
+function PlayerPortal({
+  client,
+  player,
+  events,
+  error,
+  onLogout,
+  onError,
+}: {
+  client: APIClient;
+  player: Player;
+  events: TeamEvent[];
+  error: string;
+  onLogout: () => void;
+  onError: (message: string) => void;
+}) {
+  const today = useMemo(() => new Date(), []);
+  const [selectedEventID, setSelectedEventID] = useState(events[0]?.id ?? "");
+  const [status, setStatus] = useState<(typeof playerAttendanceOptions)[number]>("unknown");
+  const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+  const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
+  const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
+  const selectedEvent = events.find((event) => event.id === selectedEventID) ?? events[0];
+  const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
+
+  useEffect(() => {
+    if (!selectedEventID && events[0]) {
+      setSelectedEventID(events[0].id);
+    }
+  }, [events, selectedEventID]);
+
+  useEffect(() => {
+    if (selectedEvent?.id) {
+      void loadStatus(selectedEvent.id);
+    }
+  }, [selectedEvent?.id]);
+
+  function shiftMonth(delta: number) {
+    setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  }
+
+  async function loadStatus(eventID: string) {
+    try {
+      const result = await client.getPlayerAttendance(eventID);
+      if (playerAttendanceOptions.includes(result.record.status as (typeof playerAttendanceOptions)[number])) {
+        setStatus(result.record.status as (typeof playerAttendanceOptions)[number]);
+      } else {
+        setStatus("unknown");
+      }
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  async function saveStatus(nextStatus = status) {
+    if (!selectedEvent?.id) {
+      return;
+    }
+    try {
+      const result = await client.savePlayerAttendance(selectedEvent.id, nextStatus);
+      setStatus(result.record.status as (typeof playerAttendanceOptions)[number]);
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  function selectEvent(event: TeamEvent) {
+    setSelectedEventID(event.id);
+    const dayKey = toLocalDateKey(event.starts_at);
+    const next = parseDateKey(dayKey);
+    setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  }
+
+  return (
+    <div className="app-shell player-app">
+      <aside className="side-rail" aria-label="队员入口">
+        <div className="brand-lockup">
+          <div className="brand-mark">AP</div>
+          <div>
+            <strong>{player.name}</strong>
+            <span>Player Schedule</span>
+          </div>
+        </div>
+        <button className="ghost-button rail-logout" type="button" onClick={onLogout} title="退出">
+          <LogOut size={18} />
+          <span>退出</span>
+        </button>
+      </aside>
+      <main className="workspace">
+        {error ? <div className="error-banner">{error}</div> : null}
+        <section className="panel-grid player-portal-grid">
+          <div className="data-panel calendar-board">
+            <div className="calendar-toolbar">
+              <button className="ghost-button icon-button" type="button" onClick={() => shiftMonth(-1)} aria-label="上个月">
+                <ChevronLeft size={18} />
+              </button>
+              <strong>{monthLabel}</strong>
+              <button className="ghost-button icon-button" type="button" onClick={() => shiftMonth(1)} aria-label="下个月">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            <div className="weekday-row" aria-hidden="true">
+              {["一", "二", "三", "四", "五", "六", "日"].map((weekday) => (
+                <span key={weekday}>{weekday}</span>
+              ))}
+            </div>
+            <div className="month-grid">
+              {monthDays.map((day) => {
+                const dayEvents = eventsByDate[day.key] ?? [];
+                return (
+                  <div className={`day-cell ${day.inCurrentMonth ? "" : "muted"} ${day.isToday ? "today" : ""}`} key={day.key}>
+                    <button className="day-pick readonly" type="button" aria-label={`查看 ${day.key}`} tabIndex={-1}>
+                      <span className="day-number">{day.dayOfMonth}</span>
+                    </button>
+                    <span className="day-events">
+                      {dayEvents.slice(0, 2).map((event) => (
+                        <button
+                          className={`event-chip ${event.type} ${selectedEvent?.id === event.id ? "active" : ""}`}
+                          type="button"
+                          key={event.id}
+                          onClick={() => selectEvent(event)}
+                        >
+                          {event.type === "training" ? "训" : "赛"} {event.title}
+                        </button>
+                      ))}
+                      {dayEvents.length > 2 ? <small className="event-chip more">+{dayEvents.length - 2}</small> : null}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="tool-panel player-status-panel">
+            <div className="panel-heading">
+              <h2>我的参加状态</h2>
+            </div>
+            {selectedEvent ? (
+              <>
+                <article className="event-card">
+                  <strong>{selectedEvent.title}</strong>
+                  <small>{formatDateRange(selectedEvent.starts_at, selectedEvent.ends_at)}</small>
+                  <small>{selectedEvent.location}</small>
+                </article>
+                <div className="status-choice">
+                  {playerAttendanceOptions.map((option) => (
+                    <button
+                      className={status === option ? "active" : ""}
+                      type="button"
+                      key={option}
+                      onClick={() => {
+                        setStatus(option);
+                        void saveStatus(option);
+                      }}
+                    >
+                      {attendanceLabels[option]}
+                    </button>
+                  ))}
+                </div>
+                <button className="primary-button" type="button" onClick={() => saveStatus()}>
+                  <Save size={18} />
+                  保存状态
+                </button>
+              </>
+            ) : (
+              <div className="empty-state">暂时还没有训练或友谊赛日程</div>
+            )}
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }
 
@@ -556,6 +855,11 @@ function PlayersPanel({
   const [name, setName] = useState("");
   const [number, setNumber] = useState("");
   const [positions, setPositions] = useState("前锋, 前腰");
+  const [editingID, setEditingID] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editNumber, setEditNumber] = useState("");
+  const [editPositions, setEditPositions] = useState("");
+  const [editStatus, setEditStatus] = useState<"active" | "inactive">("active");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -568,6 +872,40 @@ function PlayersPanel({
       onPlayersChanged([...players, result.player]);
       setName("");
       setNumber("");
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  function beginEdit(player: Player) {
+    setEditingID(player.id);
+    setEditName(player.name);
+    setEditNumber(player.number ? String(player.number) : "");
+    setEditPositions(player.positions.join(", "));
+    setEditStatus(player.status);
+  }
+
+  async function saveEdit(playerID: string) {
+    try {
+      const result = await client.updatePlayer(playerID, {
+        name: editName,
+        number: editNumber ? Number(editNumber) : null,
+        positions: editPositions.split(",").map((value) => value.trim()),
+        status: editStatus,
+      });
+      onPlayersChanged(players.map((player) => (player.id === playerID ? result.player : player)));
+      setEditingID("");
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  async function deletePlayer(playerID: string) {
+    try {
+      await client.deletePlayer(playerID);
+      onPlayersChanged(players.filter((player) => player.id !== playerID));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -600,11 +938,41 @@ function PlayersPanel({
       <div className="data-panel">
         {players.map((player) => (
           <article className="player-row" key={player.id}>
-            <strong>{player.number ?? "--"}</strong>
-            <div>
-              <span>{player.name}</span>
-              <small>{player.positions.join(" / ") || "未设置位置"}</small>
-            </div>
+            {editingID === player.id ? (
+              <div className="player-edit-row">
+                <input value={editName} onChange={(event) => setEditName(event.target.value)} aria-label="队员姓名" />
+                <input value={editNumber} onChange={(event) => setEditNumber(event.target.value)} type="number" min="1" max="99" aria-label="队员号码" />
+                <input value={editPositions} onChange={(event) => setEditPositions(event.target.value)} aria-label="队员位置" />
+                <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as "active" | "inactive")} aria-label="队员状态">
+                  <option value="active">在队</option>
+                  <option value="inactive">停用</option>
+                </select>
+                <button className="primary-button" type="button" onClick={() => saveEdit(player.id)}>
+                  保存
+                </button>
+                <button className="ghost-button" type="button" onClick={() => setEditingID("")}>
+                  取消
+                </button>
+              </div>
+            ) : (
+              <>
+                <strong>{player.number ?? "--"}</strong>
+                <div>
+                  <span>{player.name}</span>
+                  <small>
+                    {player.positions.join(" / ") || "未设置位置"} · {player.status === "active" ? "在队" : "停用"}
+                  </small>
+                </div>
+                <div className="row-actions">
+                  <button className="ghost-button icon-button" type="button" onClick={() => beginEdit(player)} aria-label={`编辑 ${player.name}`}>
+                    <Pencil size={16} />
+                  </button>
+                  <button className="ghost-button icon-button" type="button" onClick={() => deletePlayer(player.id)} aria-label={`删除 ${player.name}`}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </>
+            )}
           </article>
         ))}
         {players.length === 0 ? <div className="empty-state">还没有队员</div> : null}

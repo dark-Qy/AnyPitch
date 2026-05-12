@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"time"
 
@@ -20,6 +22,7 @@ var (
 const (
 	DefaultCoachEmail    = "coach@anypitch.local"
 	DefaultCoachPassword = "AnyPitch@2026"
+	CoachPasswordEnv     = "ANYPITCH_COACH_PASSWORD"
 )
 
 type User struct {
@@ -34,6 +37,22 @@ type Session struct {
 	User  User   `json:"user"`
 }
 
+type PlayerIdentity struct {
+	ID        string   `json:"id"`
+	TeamID    string   `json:"team_id,omitempty"`
+	Name      string   `json:"name"`
+	Number    *int     `json:"number"`
+	Positions []string `json:"positions"`
+	Status    string   `json:"status"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
+}
+
+type PlayerSession struct {
+	Token  string         `json:"token"`
+	Player PlayerIdentity `json:"player"`
+}
+
 type Service struct {
 	db *sql.DB
 }
@@ -44,15 +63,25 @@ func NewService(db *sql.DB) *Service {
 
 func (s *Service) EnsureDefaultCoach() (User, error) {
 	email := normalizeEmail(DefaultCoachEmail)
-	user, err := s.userByEmail(email)
+	password := defaultCoachPassword()
+	user, passwordHash, err := s.userWithPasswordByEmail(email)
 	if err == nil {
+		if bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)) != nil {
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				return User{}, err
+			}
+			if _, err := s.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, string(hash), user.ID); err != nil {
+				return User{}, err
+			}
+		}
 		return user, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return User{}, err
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(DefaultCoachPassword), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, err
 	}
@@ -94,6 +123,21 @@ func (s *Service) Login(email, password string) (Session, error) {
 		return Session{}, ErrInvalidCredentials
 	}
 	return s.createSession(user)
+}
+
+func (s *Service) LoginPlayerByName(name string) (PlayerSession, error) {
+	playerName := strings.TrimSpace(name)
+	if playerName == "" {
+		return PlayerSession{}, ErrInvalidCredentials
+	}
+	player, err := s.playerByName(playerName)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PlayerSession{}, ErrInvalidCredentials
+	}
+	if err != nil {
+		return PlayerSession{}, err
+	}
+	return s.createPlayerSession(player)
 }
 
 func (s *Service) userByEmail(email string) (User, error) {
@@ -139,8 +183,36 @@ func (s *Service) UserByToken(token string) (User, error) {
 	return user, nil
 }
 
+func (s *Service) PlayerByToken(token string) (PlayerIdentity, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return PlayerIdentity{}, ErrUnauthorized
+	}
+
+	player, err := scanPlayerIdentity(s.db.QueryRow(
+		`SELECT p.id, p.team_id, p.name, p.number, p.positions_json, p.status, p.created_at, p.updated_at
+		 FROM player_sessions s
+		 JOIN players p ON p.id = s.player_id AND p.team_id = s.team_id
+		 WHERE s.token = ? AND s.expires_at > ? AND p.status = 'active'`,
+		token,
+		nowISO(),
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return PlayerIdentity{}, ErrUnauthorized
+	}
+	if err != nil {
+		return PlayerIdentity{}, err
+	}
+	return player, nil
+}
+
 func (s *Service) Logout(token string) error {
 	_, err := s.db.Exec(`DELETE FROM auth_sessions WHERE token = ?`, strings.TrimSpace(token))
+	return err
+}
+
+func (s *Service) LogoutPlayer(token string) error {
+	_, err := s.db.Exec(`DELETE FROM player_sessions WHERE token = ?`, strings.TrimSpace(token))
 	return err
 }
 
@@ -164,8 +236,80 @@ func (s *Service) createSession(user User) (Session, error) {
 	return Session{Token: token, User: user}, nil
 }
 
+func (s *Service) createPlayerSession(player PlayerIdentity) (PlayerSession, error) {
+	token, err := randomToken()
+	if err != nil {
+		return PlayerSession{}, err
+	}
+	createdAt := nowISO()
+	expiresAt := time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339)
+	_, err = s.db.Exec(
+		`INSERT INTO player_sessions (token, team_id, player_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
+		token,
+		player.TeamID,
+		player.ID,
+		createdAt,
+		expiresAt,
+	)
+	if err != nil {
+		return PlayerSession{}, err
+	}
+	return PlayerSession{Token: token, Player: player}, nil
+}
+
+func (s *Service) playerByName(name string) (PlayerIdentity, error) {
+	return scanPlayerIdentity(s.db.QueryRow(
+		`SELECT p.id, p.team_id, p.name, p.number, p.positions_json, p.status, p.created_at, p.updated_at
+		 FROM players p
+		 JOIN teams t ON t.id = p.team_id
+		 WHERE p.name = ? AND p.status = 'active'
+		 ORDER BY t.created_at, p.created_at
+		 LIMIT 1`,
+		name,
+	))
+}
+
+type playerIdentityScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanPlayerIdentity(scanner playerIdentityScanner) (PlayerIdentity, error) {
+	var player PlayerIdentity
+	var number sql.NullInt64
+	var positionsJSON string
+	err := scanner.Scan(
+		&player.ID,
+		&player.TeamID,
+		&player.Name,
+		&number,
+		&positionsJSON,
+		&player.Status,
+		&player.CreatedAt,
+		&player.UpdatedAt,
+	)
+	if err != nil {
+		return PlayerIdentity{}, err
+	}
+	if number.Valid {
+		value := int(number.Int64)
+		player.Number = &value
+	}
+	if err := json.Unmarshal([]byte(positionsJSON), &player.Positions); err != nil {
+		return PlayerIdentity{}, err
+	}
+	return player, nil
+}
+
 func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func defaultCoachPassword() string {
+	password := strings.TrimSpace(os.Getenv(CoachPasswordEnv))
+	if password == "" {
+		return DefaultCoachPassword
+	}
+	return password
 }
 
 func randomToken() (string, error) {

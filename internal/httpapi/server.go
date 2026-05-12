@@ -56,6 +56,11 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	mux.HandleFunc("/api/auth/login", handler.login)
 	mux.Handle("/api/auth/logout", handler.withAuth(handler.logout))
 	mux.Handle("/api/auth/me", handler.withAuth(handler.me))
+	mux.HandleFunc("/api/player/login", handler.playerLogin)
+	mux.Handle("/api/player/logout", handler.withPlayer(handler.playerLogout))
+	mux.Handle("/api/player/me", handler.withPlayer(handler.playerMe))
+	mux.Handle("/api/player/events", handler.withPlayer(handler.playerEventsCollection))
+	mux.Handle("/api/player/events/", handler.withPlayer(handler.playerEventNested))
 	mux.Handle("/api/players", handler.withAuth(handler.playersCollection))
 	mux.Handle("/api/players/", handler.withAuth(handler.playerDetail))
 	mux.Handle("/api/locations", handler.withAuth(handler.locationsCollection))
@@ -144,6 +149,25 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, session)
 }
 
+func (h *Handler) playerLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		return
+	}
+	var input struct {
+		Name string `json:"name"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	session, err := h.auth.LoginPlayerByName(input.Name)
+	if err != nil {
+		handleAuthError(w, err)
+		return
+	}
+	writeSuccess(w, session)
+}
+
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request, ctx requestContext) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
@@ -156,12 +180,32 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request, ctx requestCont
 	writeSuccess(w, map[string]any{"ok": true})
 }
 
+func (h *Handler) playerLogout(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		return
+	}
+	if err := h.auth.LogoutPlayer(ctx.token); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to logout.")
+		return
+	}
+	writeSuccess(w, map[string]any{"ok": true})
+}
+
 func (h *Handler) me(w http.ResponseWriter, r *http.Request, ctx requestContext) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 		return
 	}
 	writeSuccess(w, map[string]any{"user": ctx.user, "team_id": ctx.teamID})
+}
+
+func (h *Handler) playerMe(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		return
+	}
+	writeSuccess(w, map[string]any{"player": ctx.player})
 }
 
 func (h *Handler) playersCollection(w http.ResponseWriter, r *http.Request, ctx requestContext) {
@@ -349,6 +393,56 @@ func (h *Handler) eventAttendance(w http.ResponseWriter, r *http.Request, ctx re
 	}
 }
 
+func (h *Handler) playerEventsCollection(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		return
+	}
+	events, err := h.events.List(ctx.teamID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to list events.")
+		return
+	}
+	writeSuccess(w, map[string]any{"events": events})
+}
+
+func (h *Handler) playerEventNested(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {
+	clean := path.Clean(strings.TrimPrefix(r.URL.Path, "/api/player/events/"))
+	parts := strings.Split(clean, "/")
+	if len(parts) == 2 && parts[1] == "attendance" {
+		h.playerEventAttendance(w, r, ctx, parts[0])
+		return
+	}
+	writeError(w, http.StatusNotFound, "not_found", "Player event route not found.")
+}
+
+func (h *Handler) playerEventAttendance(w http.ResponseWriter, r *http.Request, ctx playerRequestContext, eventID string) {
+	switch r.Method {
+	case http.MethodGet:
+		record, err := h.attendance.GetForPlayer(ctx.teamID, eventID, ctx.player.ID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_attendance", "Event not found.")
+			return
+		}
+		writeSuccess(w, map[string]any{"record": record})
+	case http.MethodPut:
+		var input struct {
+			Status string `json:"status"`
+		}
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+		record, err := h.attendance.SaveForPlayer(ctx.teamID, eventID, ctx.player.ID, input.Status)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_attendance", "Attendance status is invalid.")
+			return
+		}
+		writeSuccess(w, map[string]any{"record": record})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+	}
+}
+
 func (h *Handler) tacticsTemplates(w http.ResponseWriter, r *http.Request, ctx requestContext) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
@@ -413,6 +507,12 @@ type requestContext struct {
 	teamID string
 }
 
+type playerRequestContext struct {
+	player auth.PlayerIdentity
+	token  string
+	teamID string
+}
+
 func (h *Handler) withAuth(next func(http.ResponseWriter, *http.Request, requestContext)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
@@ -427,6 +527,18 @@ func (h *Handler) withAuth(next func(http.ResponseWriter, *http.Request, request
 			return
 		}
 		next(w, r, requestContext{user: user, token: token, teamID: teamID})
+	})
+}
+
+func (h *Handler) withPlayer(next func(http.ResponseWriter, *http.Request, playerRequestContext)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := bearerToken(r)
+		player, err := h.auth.PlayerByToken(token)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "Player access is required.")
+			return
+		}
+		next(w, r, playerRequestContext{player: player, token: token, teamID: player.TeamID})
 	})
 }
 
