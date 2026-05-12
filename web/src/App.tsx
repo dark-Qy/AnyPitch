@@ -17,12 +17,13 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
+  RefreshCw,
   Save,
   ShieldCheck,
   Trash2,
   Users,
 } from "lucide-react";
-import { type CSSProperties, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   APIClient,
   EventLocation,
@@ -44,6 +45,7 @@ import {
   groupEventsByDate,
   homeSlotsFromTemplate,
   initialCoachLoginDraft,
+  nextSelectedEventID,
   opponentSlotsFromTemplate,
   pitchGeometry,
   positionAfterDragDelta,
@@ -169,6 +171,17 @@ export function App() {
     }
   }
 
+  const refreshPlayerEvents = useCallback(async () => {
+    try {
+      const eventResult = await client.listPlayerEvents();
+      setEvents(eventResult.events);
+      setError("");
+    } catch (err) {
+      setError(messageFromError(err));
+      throw err;
+    }
+  }, [client]);
+
   async function handleCoachAuthenticated(sessionToken: string, nextUser: User) {
     client.setToken(sessionToken);
     localStorage.setItem(tokenKey, sessionToken);
@@ -223,7 +236,17 @@ export function App() {
   }
 
   if (mode === "player" && player) {
-    return <PlayerPortal client={client} player={player} events={events} error={error} onLogout={logout} onError={setError} />;
+    return (
+      <PlayerPortal
+        client={client}
+        player={player}
+        events={events}
+        error={error}
+        onEventsRefresh={refreshPlayerEvents}
+        onLogout={logout}
+        onError={setError}
+      />
+    );
   }
 
   return (
@@ -413,6 +436,7 @@ function PlayerPortal({
   player,
   events,
   error,
+  onEventsRefresh,
   onLogout,
   onError,
 }: {
@@ -420,6 +444,7 @@ function PlayerPortal({
   player: Player;
   events: TeamEvent[];
   error: string;
+  onEventsRefresh: () => Promise<void>;
   onLogout: () => void;
   onError: (message: string) => void;
 }) {
@@ -427,6 +452,7 @@ function PlayerPortal({
   const [selectedEventID, setSelectedEventID] = useState(events[0]?.id ?? "");
   const [status, setStatus] = useState<(typeof playerAttendanceOptions)[number]>("unknown");
   const [decisionSummary, setDecisionSummary] = useState<AttendanceDecisionSummary>(emptyAttendanceSummary);
+  const [refreshingEvents, setRefreshingEvents] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
@@ -434,10 +460,8 @@ function PlayerPortal({
   const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
 
   useEffect(() => {
-    if (!selectedEventID && events[0]) {
-      setSelectedEventID(events[0].id);
-    }
-  }, [events, selectedEventID]);
+    setSelectedEventID((current) => nextSelectedEventID(current, events));
+  }, [events]);
 
   useEffect(() => {
     if (selectedEvent?.id) {
@@ -445,8 +469,38 @@ function PlayerPortal({
     }
   }, [selectedEvent?.id]);
 
+  useEffect(() => {
+    const refreshSilently = () => {
+      void onEventsRefresh().catch(() => undefined);
+    };
+    const intervalID = window.setInterval(() => {
+      refreshSilently();
+    }, 15000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalID);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [onEventsRefresh]);
+
   function shiftMonth(delta: number) {
     setMonthCursor((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  }
+
+  async function refreshEvents() {
+    setRefreshingEvents(true);
+    try {
+      await onEventsRefresh();
+    } catch {
+      // The parent keeps the visible error banner in sync.
+    } finally {
+      setRefreshingEvents(false);
+    }
   }
 
   async function loadStatus(eventID: string) {
@@ -545,8 +599,18 @@ function PlayerPortal({
             </div>
           </div>
           <div className="tool-panel player-status-panel">
-            <div className="panel-heading">
+            <div className="panel-heading with-action">
               <h2>我的参加状态</h2>
+              <button
+                className="ghost-button icon-button"
+                type="button"
+                onClick={() => void refreshEvents()}
+                disabled={refreshingEvents}
+                aria-label="刷新日程"
+                title="刷新日程"
+              >
+                <RefreshCw size={17} />
+              </button>
             </div>
             {selectedEvent ? (
               <>
