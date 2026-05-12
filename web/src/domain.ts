@@ -37,6 +37,10 @@ export type CalendarDay = {
   isToday: boolean;
 };
 
+export function initialCoachLoginDraft() {
+  return { email: "", password: "" };
+}
+
 export function buildAttendanceStatusMap<T extends { id: string }>(
   players: T[],
   records: AttendanceRecord[],

@@ -4,6 +4,7 @@ import {
   buildAttendanceStatusMap,
   buildMonthCalendar,
   groupEventsByDate,
+  initialCoachLoginDraft,
   opponentSlotsFromTemplate,
   pitchGeometry,
   positionAfterDragDelta,
@@ -35,6 +36,12 @@ describe("buildAttendanceStatusMap", () => {
     );
 
     expect(records).toEqual({ p1: "unknown", p2: "late" });
+  });
+});
+
+describe("initialCoachLoginDraft", () => {
+  it("does not prefill coach credentials", () => {
+    expect(initialCoachLoginDraft()).toEqual({ email: "", password: "" });
   });
 });
 

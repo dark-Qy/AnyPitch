@@ -41,6 +41,7 @@ import {
   buildMonthCalendar,
   groupEventsByDate,
   homeSlotsFromTemplate,
+  initialCoachLoginDraft,
   opponentSlotsFromTemplate,
   pitchGeometry,
   positionAfterDragDelta,
@@ -277,8 +278,9 @@ function AuthGateway({
   onPlayerAuthenticated: (token: string, player: Player) => void;
 }) {
   const [entry, setEntry] = useState<SessionMode>("coach");
-  const [email, setEmail] = useState("coach@anypitch.local");
-  const [password, setPassword] = useState("AnyPitch@2026");
+  const coachLoginDraft = useMemo(() => initialCoachLoginDraft(), []);
+  const [email, setEmail] = useState(coachLoginDraft.email);
+  const [password, setPassword] = useState(coachLoginDraft.password);
   const [playerName, setPlayerName] = useState("");
   const [localError, setLocalError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -350,11 +352,23 @@ function AuthGateway({
               </div>
               <label>
                 邮箱
-                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="email" />
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  placeholder="coach@anypitch.local"
+                />
               </label>
               <label>
                 密码
-                <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="输入教练密码"
+                />
               </label>
               {localError || error ? <div className="error-banner compact">{localError || error}</div> : null}
               <button className="primary-button" disabled={submitting || busy} type="submit">
@@ -528,6 +542,7 @@ function PlayerPortal({
                   <strong>{selectedEvent.title}</strong>
                   <small>{formatDateRange(selectedEvent.starts_at, selectedEvent.ends_at)}</small>
                   <small>{selectedEvent.location}</small>
+                  {selectedEvent.notes ? <p>{selectedEvent.notes}</p> : null}
                 </article>
                 <div className="status-choice">
                   {playerAttendanceOptions.map((option) => (
@@ -990,6 +1005,7 @@ function CalendarPanel({
   const [startsAt, setStartsAt] = useState(`${todayKey}T20:00`);
   const [endsAt, setEndsAt] = useState(`${todayKey}T22:00`);
   const [location, setLocation] = useState(defaultLocationName);
+  const [notes, setNotes] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [selectedEventID, setSelectedEventID] = useState("");
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
@@ -1041,10 +1057,11 @@ function CalendarPanel({
         ends_at: endISO,
         location,
         opponent: type === "friendly" ? "待定对手" : "",
-        notes: "",
+        notes,
       });
       onEventsChanged([...events, result.event].sort((left, right) => left.starts_at.localeCompare(right.starts_at)));
       setSelectedEventID(result.event.id);
+      setNotes("");
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -1198,6 +1215,15 @@ function CalendarPanel({
             <Trash2 size={17} />
           </button>
         </div>
+        <label>
+          备注 / 训练内容
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="例如 小场压迫、定位球、防守转换"
+            rows={4}
+          />
+        </label>
         <button className="primary-button" type="submit">
           <Plus size={18} />
           添加到 {selectedDate.slice(5)}
@@ -1258,6 +1284,7 @@ function CalendarPanel({
                   <small>
                     {formatDateRange(selectedEvent.starts_at, selectedEvent.ends_at)} · {selectedEvent.location}
                   </small>
+                  {selectedEvent.notes ? <p>{selectedEvent.notes}</p> : null}
                 </div>
                 <span className={`event-type ${selectedEvent.type}`}>{selectedEvent.type === "training" ? "训练" : "友谊赛"}</span>
               </div>

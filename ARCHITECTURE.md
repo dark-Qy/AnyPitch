@@ -35,6 +35,7 @@
 
 - `events.starts_at` 和 `events.ends_at` 共同表达训练或友谊赛时间段，旧数据缺少结束时间时按开始后两小时兜底
 - `events.location` 未填写时使用 `北京邮电大学（海淀校区）`
+- `events.notes` 保存训练内容、注意事项或友谊赛备注，允许为空
 - `event_locations` 保存当前 team 的常用地点，启动时确保默认地点存在
 
 ## Auth Schema

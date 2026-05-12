@@ -78,6 +78,7 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 	eventID := jsonPath(t, training, "data.event.id").(string)
 	assertJSONEquals(t, training, "data.event.ends_at", "2026-05-13T22:00:00+08:00")
 	assertJSONEquals(t, training, "data.event.location", "北京邮电大学（海淀校区）")
+	assertJSONEquals(t, training, "data.event.notes", "小场压迫与转移")
 
 	attendance := performJSONRequest(t, handler, http.MethodPut, "/api/events/"+eventID+"/attendance", token, map[string]any{
 		"records": []map[string]any{

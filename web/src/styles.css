@@ -32,7 +32,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -66,7 +67,8 @@ button:disabled {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 42px;
   border: 2px solid var(--ink);
@@ -74,6 +76,13 @@ select {
   padding: 0 10px;
   background: var(--panel);
   color: var(--ink);
+}
+
+textarea {
+  min-height: 94px;
+  padding: 10px;
+  line-height: 1.5;
+  resize: vertical;
 }
 
 select {
@@ -93,6 +102,7 @@ select {
 
 input:focus,
 select:focus,
+textarea:focus,
 button:focus-visible {
   outline: 3px solid rgba(24, 160, 108, 0.28);
 }
@@ -842,6 +852,13 @@ button.event-chip:focus-visible {
   color: var(--muted);
   font-family: "SFMono-Regular", "Cascadia Mono", monospace;
   font-size: 12px;
+}
+
+.event-card p,
+.event-detail-head p {
+  margin: 4px 0 0;
+  color: var(--ink);
+  line-height: 1.55;
 }
 
 .status-choice {
