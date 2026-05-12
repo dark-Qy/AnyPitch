@@ -8,7 +8,7 @@
 
 - 服务入口层：`cmd/server/` 负责启动、读取 `APP_DB_PATH` / `HTTP_ADDR` 并装配 HTTP handler
 - SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`player_sessions`、`teams`、`players`、`events`、`event_locations`、`attendance_records`、`tactic_boards`
-- 鉴权层：`internal/auth/` 负责默认教练初始化、环境变量密码、教练登录、队员姓名登录、session 创建、Bearer token 校验和登出
+- 鉴权层：`internal/auth/` 负责默认教练初始化、环境变量密码、教练密码登录、队员姓名登录、session 创建、Bearer token 校验和登出
 - 队员层：`internal/player/` 负责队员 CRUD 和位置标签归一化
 - 日程层：`internal/event/` 负责 `training` / `friendly` 日程、开始/结束时间段和常用地点
 - 出勤层：`internal/attendance/` 负责事件维度的队员出勤状态
@@ -46,6 +46,7 @@
 ## Auth Schema
 
 - 默认教练邮箱固定为 `coach@anypitch.local`
+- 教练登录只需要提交密码，默认邮箱仅作为内部用户身份
 - 默认教练密码优先读取 `ANYPITCH_COACH_PASSWORD`，未设置时使用 `AnyPitch@2026`
 - 启动时如果默认教练已存在，也会把密码哈希同步到当前环境变量值
 - 队员 session 存在 `player_sessions`，只绑定 `team_id` 和 `player_id`

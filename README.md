@@ -31,9 +31,8 @@ npm --prefix web run dev
 - 后端：`http://127.0.0.1:8080`
 - 前端：`http://127.0.0.1:5173`
 
-默认教练账号：
+默认教练登录：
 
-- 邮箱：`coach@anypitch.local`
 - 密码：默认 `AnyPitch@2026`，可通过 `ANYPITCH_COACH_PASSWORD` 环境变量覆盖
 
 ```bash

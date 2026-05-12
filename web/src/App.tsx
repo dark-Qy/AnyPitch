@@ -37,6 +37,7 @@ import {
   AttendanceDecisionSummary,
   AttendanceRecord,
   AttendanceStatus,
+  activeRosterPlayers,
   attendanceDecisionSummary,
   buildAttendanceStatusMap,
   buildMonthCalendar,
@@ -77,7 +78,7 @@ const attendanceLabels: Record<AttendanceStatus, string> = {
   absent: "缺席",
   excused: "请假",
 };
-const playerAttendanceOptions = ["available", "unavailable", "tentative", "unknown"] as const;
+const playerAttendanceOptions = ["unknown", "available", "unavailable", "tentative"] as const;
 const playerStatusDetails: Record<(typeof playerAttendanceOptions)[number], string> = {
   available: "我能来",
   unavailable: "我不来",
@@ -297,7 +298,6 @@ function AuthGateway({
 }) {
   const [entry, setEntry] = useState<SessionMode>("coach");
   const coachLoginDraft = useMemo(() => initialCoachLoginDraft(), []);
-  const [email, setEmail] = useState(coachLoginDraft.email);
   const [password, setPassword] = useState(coachLoginDraft.password);
   const [playerName, setPlayerName] = useState("");
   const [localError, setLocalError] = useState("");
@@ -308,7 +308,7 @@ function AuthGateway({
     setSubmitting(true);
     setLocalError("");
     try {
-      const session = await client.login(email, password);
+      const session = await client.login(password);
       onCoachAuthenticated(session.token, session.user);
     } catch (err) {
       setLocalError(messageFromError(err));
@@ -366,20 +366,8 @@ function AuthGateway({
             <form className="login-form-stack" onSubmit={submitCoach} autoComplete="off">
               <div className="login-note">
                 <strong>教练登录</strong>
-                <span>默认密码可由 ANYPITCH_COACH_PASSWORD 覆盖</span>
+                <span>只需输入教练密码，可由 ANYPITCH_COACH_PASSWORD 覆盖</span>
               </div>
-              <label>
-                邮箱
-                <input
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  type="text"
-                  inputMode="email"
-                  name="anypitch-coach-id"
-                  autoComplete="off"
-                  placeholder="coach@anypitch.local"
-                />
-              </label>
               <label>
                 密码
                 <input
@@ -1045,6 +1033,7 @@ function CalendarPanel({
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const selectedEvent = events.find((event) => event.id === selectedEventID);
+  const attendancePlayers = useMemo(() => activeRosterPlayers(players), [players]);
   const summary = useMemo(
     () =>
       attendanceDecisionSummary(
@@ -1054,9 +1043,9 @@ function CalendarPanel({
           note: "",
           updated_at: "",
         })),
-        players.length,
+        attendancePlayers.length,
       ),
-    [players.length, records],
+    [attendancePlayers.length, records],
   );
   const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
 
@@ -1076,7 +1065,7 @@ function CalendarPanel({
     if (selectedEventID) {
       void loadEventAttendance(selectedEventID);
     }
-  }, [selectedEventID, players]);
+  }, [selectedEventID, attendancePlayers]);
 
   useEffect(() => {
     setDetailNotes(selectedEvent?.notes ?? "");
@@ -1143,7 +1132,7 @@ function CalendarPanel({
   async function loadEventAttendance(eventID: string) {
     try {
       const result = await client.listAttendance(eventID);
-      setRecords(buildAttendanceStatusMap(players, result.records));
+      setRecords(buildAttendanceStatusMap(attendancePlayers, result.records));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -1157,7 +1146,7 @@ function CalendarPanel({
     try {
       await client.saveAttendance(
         selectedEventID,
-        players.map((player) => ({
+        attendancePlayers.map((player) => ({
           player_id: player.id,
           status: records[player.id] ?? "unknown",
           note: "",
@@ -1354,7 +1343,7 @@ function CalendarPanel({
                 <span>未确认 {summary.unknown}</span>
               </div>
               <div className="inline-attendance-list">
-                {players.map((player) => (
+                {attendancePlayers.map((player) => (
                   <article className="attendance-row compact" key={player.id}>
                     <div>
                       <strong>{player.name}</strong>
@@ -1382,7 +1371,7 @@ function CalendarPanel({
                 <Save size={18} />
                 保存本日程出勤
               </button>
-              {players.length === 0 ? <div className="empty-state">先添加队员，再管理这个日程的出勤</div> : null}
+              {attendancePlayers.length === 0 ? <div className="empty-state">先添加队员，再管理这个日程的出勤</div> : null}
             </>
           ) : (
             <div className="empty-state">点击月历中的具体日程，直接管理队员出勤</div>
@@ -1407,6 +1396,7 @@ function AttendancePanel({
   const [eventID, setEventID] = useState("");
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
   const selectedEventID = eventID || events[0]?.id || "";
+  const attendancePlayers = useMemo(() => activeRosterPlayers(players), [players]);
   const summary = useMemo(
     () =>
       attendanceDecisionSummary(
@@ -1416,21 +1406,21 @@ function AttendancePanel({
           note: "",
           updated_at: "",
         })),
-        players.length,
+        attendancePlayers.length,
       ),
-    [players.length, records],
+    [attendancePlayers.length, records],
   );
 
   useEffect(() => {
     if (selectedEventID) {
       void loadAttendance(selectedEventID);
     }
-  }, [selectedEventID]);
+  }, [selectedEventID, attendancePlayers]);
 
   async function loadAttendance(nextEventID: string) {
     try {
       const result = await client.listAttendance(nextEventID);
-      setRecords(buildAttendanceStatusMap(players, result.records));
+      setRecords(buildAttendanceStatusMap(attendancePlayers, result.records));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -1444,7 +1434,7 @@ function AttendancePanel({
     try {
       await client.saveAttendance(
         selectedEventID,
-        players.map((player) => ({
+        attendancePlayers.map((player) => ({
           player_id: player.id,
           status: records[player.id] ?? "unknown",
           note: "",
@@ -1489,7 +1479,7 @@ function AttendancePanel({
         </button>
       </div>
       <div className="data-panel attendance-list">
-        {players.map((player) => (
+        {attendancePlayers.map((player) => (
           <article className="attendance-row" key={player.id}>
             <div>
               <strong>{player.name}</strong>
@@ -1512,7 +1502,7 @@ function AttendancePanel({
             </select>
           </article>
         ))}
-        {players.length === 0 || events.length === 0 ? <div className="empty-state">先添加队员和日程，再登记出勤</div> : null}
+        {attendancePlayers.length === 0 || events.length === 0 ? <div className="empty-state">先添加队员和日程，再登记出勤</div> : null}
       </div>
     </section>
   );

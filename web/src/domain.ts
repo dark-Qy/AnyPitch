@@ -46,7 +46,11 @@ export type CalendarDay = {
 };
 
 export function initialCoachLoginDraft() {
-  return { email: "", password: "" };
+  return { password: "" };
+}
+
+export function activeRosterPlayers<T extends { status?: string }>(players: T[]): T[] {
+  return players.filter((player) => player.status !== "inactive");
 }
 
 export function buildAttendanceStatusMap<T extends { id: string }>(

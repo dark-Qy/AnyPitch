@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -28,7 +30,6 @@ func TestCoachCanManagePlayersEventsAttendanceAndTactics(t *testing.T) {
 	assertStatus(t, registerAttempt, http.StatusNotFound)
 
 	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
-		"email":    "coach@anypitch.local",
 		"password": "AnyPitch@2026",
 	})
 	assertStatus(t, login, http.StatusOK)
@@ -128,7 +129,6 @@ func TestPlayerCanLoginByNameAndOnlyManageOwnAttendance(t *testing.T) {
 	handler := newTestHandler(t)
 
 	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
-		"email":    "coach@anypitch.local",
 		"password": "AnyPitch@2026",
 	})
 	assertStatus(t, login, http.StatusOK)
@@ -156,6 +156,17 @@ func TestPlayerCanLoginByNameAndOnlyManageOwnAttendance(t *testing.T) {
 		"positions": []string{"后卫"},
 	})
 	assertStatus(t, thirdPlayer, http.StatusOK)
+	inactivePlayer := performJSONRequest(t, handler, http.MethodPost, "/api/players", coachToken, map[string]any{
+		"name":      "停用队员",
+		"number":    99,
+		"positions": []string{"后勤"},
+	})
+	assertStatus(t, inactivePlayer, http.StatusOK)
+	inactivePlayerID := jsonPath(t, inactivePlayer, "data.player.id").(string)
+	inactiveStatus := performJSONRequest(t, handler, http.MethodPatch, "/api/players/"+inactivePlayerID, coachToken, map[string]any{
+		"status": "inactive",
+	})
+	assertStatus(t, inactiveStatus, http.StatusOK)
 
 	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
 		"type":      "training",
@@ -211,12 +222,53 @@ func TestDefaultCoachPasswordCanComeFromEnvironment(t *testing.T) {
 	handler := newTestHandler(t)
 
 	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
-		"email":    "coach@anypitch.local",
 		"password": "CoachSecret@2026",
 	})
 	assertStatus(t, login, http.StatusOK)
 	if jsonPath(t, login, "data.token").(string) == "" {
 		t.Fatal("expected login token")
+	}
+}
+
+func TestCoachBootstrapEndpointsCanLoadConcurrentlyAfterPasswordLogin(t *testing.T) {
+	handler := newTestHandler(t)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	token := jsonPath(t, login, "data.token").(string)
+
+	paths := []string{
+		"/api/auth/me",
+		"/api/players",
+		"/api/events",
+		"/api/locations",
+		"/api/tactics/templates",
+		"/api/tactics/boards",
+	}
+	failures := make(chan string, len(paths)*8)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		for _, path := range paths {
+			wg.Add(1)
+			go func(path string) {
+				defer wg.Done()
+				<-start
+				response := performJSONRequest(t, handler, http.MethodGet, path, token, nil)
+				if response.Code != http.StatusOK {
+					failures <- fmt.Sprintf("%s returned %d: %s", path, response.Code, response.Body.String())
+				}
+			}(path)
+		}
+	}
+	close(start)
+	wg.Wait()
+	close(failures)
+
+	for failure := range failures {
+		t.Error(failure)
 	}
 }
 
@@ -235,7 +287,6 @@ func TestDefaultCoachEnvironmentPasswordRotatesExistingCoach(t *testing.T) {
 		t.Fatalf("new handler: %v", err)
 	}
 	oldLogin := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
-		"email":    "coach@anypitch.local",
 		"password": "AnyPitch@2026",
 	})
 	assertStatus(t, oldLogin, http.StatusOK)
@@ -246,13 +297,11 @@ func TestDefaultCoachEnvironmentPasswordRotatesExistingCoach(t *testing.T) {
 		t.Fatalf("new handler after rotation: %v", err)
 	}
 	newLogin := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
-		"email":    "coach@anypitch.local",
 		"password": "RotatedCoach@2026",
 	})
 	assertStatus(t, newLogin, http.StatusOK)
 
 	staleLogin := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
-		"email":    "coach@anypitch.local",
 		"password": "AnyPitch@2026",
 	})
 	assertStatus(t, staleLogin, http.StatusBadRequest)
