@@ -1,6 +1,5 @@
 import {
   DndContext,
-  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   type DragEndEvent,
@@ -42,9 +41,9 @@ import {
   buildMonthCalendar,
   groupEventsByDate,
   homeSlotsFromTemplate,
-  normalizeSlotPosition,
   opponentSlotsFromTemplate,
   pitchGeometry,
+  positionAfterDragDelta,
   templatesForFormat,
   toLocalDateKey,
   type TacticFormat,
@@ -594,7 +593,6 @@ function TacticsPanel({
     }),
     useSensor(KeyboardSensor),
   );
-  const activeDragSlot = slots.find((slot) => slot.slot_id === activeDragID);
   const selectedSlot = slots.find((slot) => slot.slot_id === selectedSlotID);
 
   useEffect(() => {
@@ -645,22 +643,17 @@ function TacticsPanel({
 
   function onDragEnd(event: DragEndEvent) {
     const field = fieldRef.current;
-    const translated = event.active.rect.current.translated;
-    if (!field || !translated) {
+    if (!field) {
       setActiveDragID("");
       return;
     }
     const rect = field.getBoundingClientRect();
-    const next = normalizeSlotPosition({
-      x: ((translated.left + translated.width / 2 - rect.left) / rect.width) * 100,
-      y: ((translated.top + translated.height / 2 - rect.top) / rect.height) * 100,
-    });
     setSlots((current) =>
       current.map((slot) => {
         if (slot.slot_id !== event.active.id) {
           return slot;
         }
-        return { ...slot, ...next };
+        return { ...slot, ...positionAfterDragDelta(slot, event.delta, { width: rect.width, height: rect.height }) };
       }),
     );
     setActiveDragID("");
@@ -782,16 +775,6 @@ function TacticsPanel({
             ))}
           </div>
         </div>
-        <DragOverlay dropAnimation={{ duration: 120, easing: "ease-out" }}>
-          {activeDragSlot ? (
-            <div className={`slot-marker ${activeDragSlot.side === "opponent" ? "opponent" : ""} drag-overlay`}>
-              <SlotMarkerContent
-                slot={activeDragSlot}
-                player={activeDragSlot.side === "opponent" ? undefined : players.find((player) => player.id === activeDragSlot.player_id)}
-              />
-            </div>
-          ) : null}
-        </DragOverlay>
       </DndContext>
     </section>
   );
@@ -810,7 +793,8 @@ function DraggableSlot({
   player?: Player;
   onSelect: () => void;
 }) {
-  const { attributes, listeners, setNodeRef } = useDraggable({ id: slot.slot_id });
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: slot.slot_id });
+  const dragTransform = transform ? ` translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0)` : "";
   return (
     <button
       ref={setNodeRef}
@@ -818,7 +802,7 @@ function DraggableSlot({
       style={{
         left: `${slot.x}%`,
         top: `${slot.y}%`,
-        transform: "translate(-50%, -50%)",
+        transform: `translate(-50%, -50%)${dragTransform}`,
       }}
       type="button"
       onClick={onSelect}

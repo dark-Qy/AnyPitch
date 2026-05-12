@@ -6,6 +6,7 @@ import {
   groupEventsByDate,
   opponentSlotsFromTemplate,
   pitchGeometry,
+  positionAfterDragDelta,
   templatesForFormat,
   normalizeSlotPosition,
 } from "./domain";
@@ -40,6 +41,19 @@ describe("buildAttendanceStatusMap", () => {
 describe("normalizeSlotPosition", () => {
   it("keeps dragged tactic slots inside the pitch", () => {
     expect(normalizeSlotPosition({ x: -4, y: 112 })).toEqual({ x: 4, y: 96 });
+  });
+});
+
+describe("positionAfterDragDelta", () => {
+  it("converts drag pixels into percentage movement from the current slot", () => {
+    expect(positionAfterDragDelta({ x: 50, y: 40 }, { x: 34, y: 105 }, { width: 340, height: 700 })).toEqual({
+      x: 60,
+      y: 55,
+    });
+  });
+
+  it("falls back to the current normalized slot when the pitch size is invalid", () => {
+    expect(positionAfterDragDelta({ x: -8, y: 120 }, { x: 40, y: 40 }, { width: 0, height: 700 })).toEqual({ x: 4, y: 96 });
   });
 });
 

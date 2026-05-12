@@ -519,16 +519,10 @@ p {
 }
 
 .slot-marker.dragging {
-  opacity: 0.42;
+  z-index: 8;
+  opacity: 0.98;
   cursor: grabbing;
-}
-
-.slot-marker.drag-overlay {
-  position: static;
-  opacity: 0.96;
-  transform: none;
-  cursor: grabbing;
-  pointer-events: none;
+  box-shadow: 6px 6px 0 rgba(22, 21, 18, 0.34);
 }
 
 .slot-marker:hover,

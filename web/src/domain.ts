@@ -73,6 +73,21 @@ export function normalizeSlotPosition(position: SlotPosition): SlotPosition {
   };
 }
 
+export function positionAfterDragDelta(
+  current: SlotPosition,
+  delta: SlotPosition,
+  pitchSize: { width: number; height: number },
+): SlotPosition {
+  if (pitchSize.width <= 0 || pitchSize.height <= 0) {
+    return normalizeSlotPosition(current);
+  }
+
+  return normalizeSlotPosition({
+    x: current.x + (delta.x / pitchSize.width) * 100,
+    y: current.y + (delta.y / pitchSize.height) * 100,
+  });
+}
+
 export function templatesForFormat<T extends { format: TacticFormat }>(templates: T[], format: TacticFormat): T[] {
   return templates.filter((template) => template.format === format);
 }
