@@ -105,6 +105,8 @@ api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练"
 EVENT_ID="$(json_get "${SMOKE_DIR}/training.json" data.event.id)"
 [[ -n "${EVENT_ID}" ]]
 [[ "$(json_get "${SMOKE_DIR}/training.json" data.event.ends_at)" == "2026-05-13T22:00:00+08:00" ]]
+api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"notes":"训练内容：压迫、定位球、防守转换"}' "${SMOKE_DIR}/training-update.json"
+[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.notes)" == "训练内容：压迫、定位球、防守转换" ]]
 
 echo "==> create friendly"
 api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","starts_at":"2026-05-16T18:00:00+08:00","ends_at":"2026-05-16T20:00:00+08:00","location":"北京邮电大学（沙河校区）","opponent":"Blue FC","notes":"八人制"}' "${SMOKE_DIR}/friendly.json"
@@ -121,8 +123,9 @@ PLAYER_TOKEN="$(json_get "${SMOKE_DIR}/player-login.json" data.token)"
 [[ "$(json_get "${SMOKE_DIR}/player-login.json" data.player.name)" == "林海" ]]
 api GET /api/player/events "${PLAYER_TOKEN}" "" "${SMOKE_DIR}/player-events.json"
 [[ "$(json_get "${SMOKE_DIR}/player-events.json" data.events.0.title)" == "周三控球训练" ]]
-api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status":"unavailable"}' "${SMOKE_DIR}/player-attendance.json"
-[[ "$(json_get "${SMOKE_DIR}/player-attendance.json" data.record.status)" == "unavailable" ]]
+api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status":"tentative"}' "${SMOKE_DIR}/player-attendance.json"
+[[ "$(json_get "${SMOKE_DIR}/player-attendance.json" data.record.status)" == "tentative" ]]
+[[ "$(json_get "${SMOKE_DIR}/player-attendance.json" data.summary.tentative)" == "1" ]]
 
 echo "==> tactic templates"
 api GET /api/tactics/templates "${TOKEN}" "" "${SMOKE_DIR}/templates.json"

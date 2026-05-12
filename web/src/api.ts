@@ -1,4 +1,4 @@
-import type { AttendanceRecord, AttendanceStatus } from "./domain";
+import type { AttendanceDecisionSummary, AttendanceRecord, AttendanceStatus } from "./domain";
 
 export type User = {
   id: string;
@@ -182,6 +182,13 @@ export class APIClient {
     });
   }
 
+  updateEvent(eventID: string, input: Partial<Pick<TeamEvent, "type" | "title" | "starts_at" | "ends_at" | "location" | "opponent" | "notes">>) {
+    return this.request<{ event: TeamEvent }>(`/api/events/${eventID}`, {
+      method: "PATCH",
+      body: input,
+    });
+  }
+
   listAttendance(eventID: string) {
     return this.request<{ records: AttendanceRecord[] }>(`/api/events/${eventID}/attendance`);
   }
@@ -194,11 +201,11 @@ export class APIClient {
   }
 
   getPlayerAttendance(eventID: string) {
-    return this.request<{ record: AttendanceRecord }>(`/api/player/events/${eventID}/attendance`);
+    return this.request<{ record: AttendanceRecord; summary: AttendanceDecisionSummary }>(`/api/player/events/${eventID}/attendance`);
   }
 
-  savePlayerAttendance(eventID: string, status: "unknown" | "available" | "unavailable") {
-    return this.request<{ record: AttendanceRecord }>(`/api/player/events/${eventID}/attendance`, {
+  savePlayerAttendance(eventID: string, status: "unknown" | "available" | "unavailable" | "tentative") {
+    return this.request<{ record: AttendanceRecord; summary: AttendanceDecisionSummary }>(`/api/player/events/${eventID}/attendance`, {
       method: "PUT",
       body: { status },
     });

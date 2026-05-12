@@ -15,6 +15,13 @@ type Record struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
+type Summary struct {
+	Available   int `json:"available"`
+	Unavailable int `json:"unavailable"`
+	Tentative   int `json:"tentative"`
+	Unknown     int `json:"unknown"`
+}
+
 type ReplaceInput struct {
 	Records []Record `json:"records"`
 }
@@ -160,6 +167,52 @@ func (s *Service) SaveForPlayer(teamID, eventID, playerID, status string) (Recor
 	return record, nil
 }
 
+func (s *Service) Summary(teamID, eventID string) (Summary, error) {
+	if err := s.ensureEvent(teamID, eventID); err != nil {
+		return Summary{}, err
+	}
+	var totalPlayers int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM players WHERE team_id = ? AND status = 'active'`, teamID).Scan(&totalPlayers); err != nil {
+		return Summary{}, err
+	}
+	rows, err := s.db.Query(
+		`SELECT a.status
+		 FROM attendance_records a
+		 JOIN players p ON p.id = a.player_id
+		 WHERE a.event_id = ? AND p.team_id = ? AND p.status = 'active'`,
+		eventID,
+		teamID,
+	)
+	if err != nil {
+		return Summary{}, err
+	}
+	defer rows.Close()
+
+	var summary Summary
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return Summary{}, err
+		}
+		switch status {
+		case "available", "late", "present":
+			summary.Available++
+		case "unavailable", "injured", "absent", "excused":
+			summary.Unavailable++
+		case "tentative":
+			summary.Tentative++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return Summary{}, err
+	}
+	known := summary.Available + summary.Unavailable + summary.Tentative
+	if totalPlayers > known {
+		summary.Unknown = totalPlayers - known
+	}
+	return summary, nil
+}
+
 func (s *Service) ensureEvent(teamID, eventID string) error {
 	var exists int
 	err := s.db.QueryRow(`SELECT 1 FROM events WHERE id = ? AND team_id = ?`, eventID, teamID).Scan(&exists)
@@ -180,7 +233,7 @@ func ensurePlayer(tx *sql.Tx, teamID, playerID string) error {
 
 func validStatus(status string) bool {
 	switch status {
-	case "unknown", "available", "unavailable", "late", "injured", "present", "absent", "excused":
+	case "unknown", "available", "unavailable", "tentative", "late", "injured", "present", "absent", "excused":
 		return true
 	default:
 		return false
@@ -189,7 +242,7 @@ func validStatus(status string) bool {
 
 func validPlayerStatus(status string) bool {
 	switch status {
-	case "unknown", "available", "unavailable":
+	case "unknown", "available", "unavailable", "tentative":
 		return true
 	default:
 		return false

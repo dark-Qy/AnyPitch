@@ -6,6 +6,7 @@
 - Session token 使用随机字节生成，API 只接受 `Authorization: Bearer <token>`
 - 前端只在 `localStorage["anypitch_token"]` / `localStorage["anypitch_player_token"]` 保存 bearer token
 - SQLite 数据按登录教练的默认 team 隔离
+- 队员端只展示出勤汇总，不返回其他队员个人出勤明细
 - 不在日志或响应中输出密码、password hash 或 token
 - 当前默认教练账号仅用于本地/内网 MVP，生产化前必须替换为正式账号初始化策略
 

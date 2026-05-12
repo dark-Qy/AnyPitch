@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  attendanceDecisionSummary,
   attendanceSummary,
   buildAttendanceStatusMap,
   buildMonthCalendar,
@@ -22,6 +23,22 @@ describe("attendanceSummary", () => {
 
     expect(summary.ready).toBe(2);
     expect(summary.blocked).toBe(1);
+  });
+});
+
+describe("attendanceDecisionSummary", () => {
+  it("separates attending, declined, tentative, and unseen players", () => {
+    expect(
+      attendanceDecisionSummary(
+        [
+          { player_id: "p1", status: "available", note: "", updated_at: "" },
+          { player_id: "p2", status: "unavailable", note: "", updated_at: "" },
+          { player_id: "p3", status: "tentative", note: "", updated_at: "" },
+          { player_id: "p4", status: "unknown", note: "", updated_at: "" },
+        ],
+        5,
+      ),
+    ).toEqual({ available: 1, unavailable: 1, tentative: 1, unknown: 2 });
   });
 });
 

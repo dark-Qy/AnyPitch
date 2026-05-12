@@ -38,6 +38,11 @@
 - `events.notes` 保存训练内容、注意事项或友谊赛备注，允许为空
 - `event_locations` 保存当前 team 的常用地点，启动时确保默认地点存在
 
+## Attendance Schema
+
+- 队员自助状态包含 `unknown`（未确认）/ `available`（参加）/ `unavailable`（拒绝）/ `tentative`（待定）
+- 队员端只返回全队状态汇总，不暴露其他队员的个人选择明细
+
 ## Auth Schema
 
 - 默认教练邮箱固定为 `coach@anypitch.local`

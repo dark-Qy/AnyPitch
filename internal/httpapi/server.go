@@ -424,7 +424,12 @@ func (h *Handler) playerEventAttendance(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusBadRequest, "invalid_attendance", "Event not found.")
 			return
 		}
-		writeSuccess(w, map[string]any{"record": record})
+		summary, err := h.attendance.Summary(ctx.teamID, eventID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_attendance", "Event not found.")
+			return
+		}
+		writeSuccess(w, map[string]any{"record": record, "summary": summary})
 	case http.MethodPut:
 		var input struct {
 			Status string `json:"status"`
@@ -437,7 +442,12 @@ func (h *Handler) playerEventAttendance(w http.ResponseWriter, r *http.Request, 
 			writeError(w, http.StatusBadRequest, "invalid_attendance", "Attendance status is invalid.")
 			return
 		}
-		writeSuccess(w, map[string]any{"record": record})
+		summary, err := h.attendance.Summary(ctx.teamID, eventID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_attendance", "Event not found.")
+			return
+		}
+		writeSuccess(w, map[string]any{"record": record, "summary": summary})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 	}
@@ -546,6 +556,9 @@ func (h *Handler) ensureDefaultTeam(userID string) (string, error) {
 	var teamID string
 	err := h.db.QueryRow(`SELECT id FROM teams WHERE user_id = ? ORDER BY created_at LIMIT 1`, userID).Scan(&teamID)
 	if err == nil {
+		if _, err := h.db.Exec(`UPDATE teams SET name = ?, updated_at = ? WHERE id = ?`, "西土城FC", time.Now().Format(time.RFC3339), teamID); err != nil {
+			return "", err
+		}
 		if h.events != nil {
 			if err := h.events.EnsureDefaultLocation(teamID); err != nil {
 				return "", err
@@ -562,7 +575,7 @@ func (h *Handler) ensureDefaultTeam(userID string) (string, error) {
 		`INSERT INTO teams (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
 		teamID,
 		userID,
-		"AnyPitch FC",
+		"西土城FC",
 		now,
 		now,
 	)

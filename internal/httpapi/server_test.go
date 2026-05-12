@@ -148,6 +148,14 @@ func TestPlayerCanLoginByNameAndOnlyManageOwnAttendance(t *testing.T) {
 		"positions": []string{"边锋"},
 	})
 	assertStatus(t, otherPlayer, http.StatusOK)
+	otherPlayerID := jsonPath(t, otherPlayer, "data.player.id").(string)
+
+	thirdPlayer := performJSONRequest(t, handler, http.MethodPost, "/api/players", coachToken, map[string]any{
+		"name":      "小白",
+		"number":    3,
+		"positions": []string{"后卫"},
+	})
+	assertStatus(t, thirdPlayer, http.StatusOK)
 
 	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
 		"type":      "training",
@@ -172,16 +180,27 @@ func TestPlayerCanLoginByNameAndOnlyManageOwnAttendance(t *testing.T) {
 	assertStatus(t, events, http.StatusOK)
 	assertJSONEquals(t, events, "data.events.0.title", "周三控球训练")
 
+	coachStatus := performJSONRequest(t, handler, http.MethodPut, "/api/events/"+eventID+"/attendance", coachToken, map[string]any{
+		"records": []map[string]any{
+			{"player_id": otherPlayerID, "status": "unavailable", "note": ""},
+		},
+	})
+	assertStatus(t, coachStatus, http.StatusOK)
+
 	status := performJSONRequest(t, handler, http.MethodPut, "/api/player/events/"+eventID+"/attendance", playerToken, map[string]any{
-		"status": "available",
+		"status": "tentative",
 	})
 	assertStatus(t, status, http.StatusOK)
 	assertJSONEquals(t, status, "data.record.player_id", playerID)
-	assertJSONEquals(t, status, "data.record.status", "available")
+	assertJSONEquals(t, status, "data.record.status", "tentative")
 
 	ownStatus := performJSONRequest(t, handler, http.MethodGet, "/api/player/events/"+eventID+"/attendance", playerToken, nil)
 	assertStatus(t, ownStatus, http.StatusOK)
-	assertJSONEquals(t, ownStatus, "data.record.status", "available")
+	assertJSONEquals(t, ownStatus, "data.record.status", "tentative")
+	assertJSONEquals(t, ownStatus, "data.summary.available", float64(0))
+	assertJSONEquals(t, ownStatus, "data.summary.unavailable", float64(1))
+	assertJSONEquals(t, ownStatus, "data.summary.tentative", float64(1))
+	assertJSONEquals(t, ownStatus, "data.summary.unknown", float64(1))
 
 	forbidden := performJSONRequest(t, handler, http.MethodGet, "/api/players", playerToken, nil)
 	assertStatus(t, forbidden, http.StatusUnauthorized)

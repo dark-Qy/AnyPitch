@@ -34,9 +34,10 @@ import {
   User,
 } from "./api";
 import {
+  AttendanceDecisionSummary,
   AttendanceRecord,
   AttendanceStatus,
-  attendanceSummary,
+  attendanceDecisionSummary,
   buildAttendanceStatusMap,
   buildMonthCalendar,
   groupEventsByDate,
@@ -52,11 +53,13 @@ import {
 
 const tokenKey = "anypitch_token";
 const playerTokenKey = "anypitch_player_token";
+const teamName = "西土城FC";
 const defaultLocationName = "北京邮电大学（海淀校区）";
 const attendanceOptions: AttendanceStatus[] = [
   "unknown",
   "available",
   "unavailable",
+  "tentative",
   "late",
   "injured",
   "present",
@@ -67,13 +70,26 @@ const attendanceLabels: Record<AttendanceStatus, string> = {
   unknown: "未确认",
   available: "可参加",
   unavailable: "不可参加",
+  tentative: "待定",
   late: "迟到",
   injured: "伤病",
   present: "已到场",
   absent: "缺席",
   excused: "请假",
 };
-const playerAttendanceOptions = ["unknown", "available", "unavailable"] as const;
+const playerAttendanceOptions = ["available", "unavailable", "tentative", "unknown"] as const;
+const playerStatusDetails: Record<(typeof playerAttendanceOptions)[number], string> = {
+  available: "我能来",
+  unavailable: "我不来",
+  tentative: "还不确定",
+  unknown: "还没看",
+};
+const emptyAttendanceSummary: AttendanceDecisionSummary = {
+  available: 0,
+  unavailable: 0,
+  tentative: 0,
+  unknown: 0,
+};
 
 type View = "tactics" | "players" | "calendar" | "attendance";
 type SessionMode = "coach" | "player";
@@ -156,6 +172,7 @@ export function App() {
     client.setToken(sessionToken);
     localStorage.setItem(tokenKey, sessionToken);
     localStorage.removeItem(playerTokenKey);
+    setError("");
     setMode("coach");
     setToken(sessionToken);
     setUser(nextUser);
@@ -166,6 +183,7 @@ export function App() {
     client.setToken(sessionToken);
     localStorage.setItem(playerTokenKey, sessionToken);
     localStorage.removeItem(tokenKey);
+    setError("");
     setMode("player");
     setToken(sessionToken);
     setPlayer(nextPlayer);
@@ -211,10 +229,10 @@ export function App() {
     <div className="app-shell">
       <aside className="side-rail" aria-label="主导航">
         <div className="brand-lockup">
-          <div className="brand-mark">AP</div>
+          <div className="brand-mark">西</div>
           <div>
-            <strong>AnyPitch</strong>
-            <span>Coach Workbench</span>
+            <strong>{teamName}</strong>
+            <span>AnyPitch Workbench</span>
           </div>
         </div>
         <nav className="nav-stack">
@@ -317,9 +335,9 @@ function AuthGateway({
     <main className="auth-page">
       <section className="auth-card">
         <div className="auth-brand">
-          <div className="brand-mark large">AP</div>
+          <div className="brand-mark large">西</div>
           <p>AnyPitch</p>
-          <h1>单队教练工作台</h1>
+          <h1>{teamName}</h1>
         </div>
         <div className="auth-form">
           <div className="role-switch" role="tablist" aria-label="选择入口">
@@ -345,7 +363,7 @@ function AuthGateway({
             </button>
           </div>
           {entry === "coach" ? (
-            <form className="login-form-stack" onSubmit={submitCoach}>
+            <form className="login-form-stack" onSubmit={submitCoach} autoComplete="off">
               <div className="login-note">
                 <strong>教练登录</strong>
                 <span>默认密码可由 ANYPITCH_COACH_PASSWORD 覆盖</span>
@@ -355,8 +373,10 @@ function AuthGateway({
                 <input
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  type="email"
-                  autoComplete="email"
+                  type="text"
+                  inputMode="email"
+                  name="anypitch-coach-id"
+                  autoComplete="off"
                   placeholder="coach@anypitch.local"
                 />
               </label>
@@ -366,7 +386,8 @@ function AuthGateway({
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type="password"
-                  autoComplete="current-password"
+                  name="anypitch-coach-passphrase"
+                  autoComplete="new-password"
                   placeholder="输入教练密码"
                 />
               </label>
@@ -417,6 +438,7 @@ function PlayerPortal({
   const today = useMemo(() => new Date(), []);
   const [selectedEventID, setSelectedEventID] = useState(events[0]?.id ?? "");
   const [status, setStatus] = useState<(typeof playerAttendanceOptions)[number]>("unknown");
+  const [decisionSummary, setDecisionSummary] = useState<AttendanceDecisionSummary>(emptyAttendanceSummary);
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
@@ -447,6 +469,7 @@ function PlayerPortal({
       } else {
         setStatus("unknown");
       }
+      setDecisionSummary(result.summary);
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -460,6 +483,7 @@ function PlayerPortal({
     try {
       const result = await client.savePlayerAttendance(selectedEvent.id, nextStatus);
       setStatus(result.record.status as (typeof playerAttendanceOptions)[number]);
+      setDecisionSummary(result.summary);
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -477,10 +501,10 @@ function PlayerPortal({
     <div className="app-shell player-app">
       <aside className="side-rail" aria-label="队员入口">
         <div className="brand-lockup">
-          <div className="brand-mark">AP</div>
+          <div className="brand-mark">西</div>
           <div>
             <strong>{player.name}</strong>
-            <span>Player Schedule</span>
+            <span>{teamName}</span>
           </div>
         </div>
         <button className="ghost-button rail-logout" type="button" onClick={onLogout} title="退出">
@@ -544,10 +568,16 @@ function PlayerPortal({
                   <small>{selectedEvent.location}</small>
                   {selectedEvent.notes ? <p>{selectedEvent.notes}</p> : null}
                 </article>
+                <div className="decision-summary" aria-label="队员确认汇总">
+                  <span className="available">参加 {decisionSummary.available}</span>
+                  <span className="unavailable">拒绝 {decisionSummary.unavailable}</span>
+                  <span className="tentative">待定 {decisionSummary.tentative}</span>
+                  <span>未确认 {decisionSummary.unknown}</span>
+                </div>
                 <div className="status-choice">
                   {playerAttendanceOptions.map((option) => (
                     <button
-                      className={status === option ? "active" : ""}
+                      className={`${status === option ? "active" : ""} ${option}`}
                       type="button"
                       key={option}
                       onClick={() => {
@@ -555,7 +585,8 @@ function PlayerPortal({
                         void saveStatus(option);
                       }}
                     >
-                      {attendanceLabels[option]}
+                      <strong>{attendanceLabels[option]}</strong>
+                      <small>{playerStatusDetails[option]}</small>
                     </button>
                   ))}
                 </div>
@@ -1009,21 +1040,23 @@ function CalendarPanel({
   const [newLocation, setNewLocation] = useState("");
   const [selectedEventID, setSelectedEventID] = useState("");
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
+  const [detailNotes, setDetailNotes] = useState("");
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events]);
   const selectedEvent = events.find((event) => event.id === selectedEventID);
   const summary = useMemo(
     () =>
-      attendanceSummary(
+      attendanceDecisionSummary(
         Object.entries(records).map(([playerID, status]) => ({
           player_id: playerID,
           status,
           note: "",
           updated_at: "",
         })),
+        players.length,
       ),
-    [records],
+    [players.length, records],
   );
   const monthLabel = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(monthCursor);
 
@@ -1044,6 +1077,10 @@ function CalendarPanel({
       void loadEventAttendance(selectedEventID);
     }
   }, [selectedEventID, players]);
+
+  useEffect(() => {
+    setDetailNotes(selectedEvent?.notes ?? "");
+  }, [selectedEvent?.id, selectedEvent?.notes]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1126,6 +1163,19 @@ function CalendarPanel({
           note: "",
         })),
       );
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  async function saveEventNotes() {
+    if (!selectedEvent) {
+      return;
+    }
+    try {
+      const result = await client.updateEvent(selectedEvent.id, { notes: detailNotes });
+      onEventsChanged(events.map((event) => (event.id === result.event.id ? result.event : event)));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -1284,13 +1334,24 @@ function CalendarPanel({
                   <small>
                     {formatDateRange(selectedEvent.starts_at, selectedEvent.ends_at)} · {selectedEvent.location}
                   </small>
-                  {selectedEvent.notes ? <p>{selectedEvent.notes}</p> : null}
                 </div>
                 <span className={`event-type ${selectedEvent.type}`}>{selectedEvent.type === "training" ? "训练" : "友谊赛"}</span>
               </div>
+              <div className="event-notes-editor">
+                <label>
+                  训练内容 / 备注
+                  <textarea value={detailNotes} onChange={(event) => setDetailNotes(event.target.value)} rows={4} />
+                </label>
+                <button className="ghost-button" type="button" onClick={saveEventNotes}>
+                  <Save size={18} />
+                  保存备注
+                </button>
+              </div>
               <div className="summary-box">
-                <span>可用 {summary.ready}</span>
-                <span>不可用 {summary.blocked}</span>
+                <span>参加 {summary.available}</span>
+                <span>拒绝 {summary.unavailable}</span>
+                <span>待定 {summary.tentative}</span>
+                <span>未确认 {summary.unknown}</span>
               </div>
               <div className="inline-attendance-list">
                 {players.map((player) => (
@@ -1348,15 +1409,16 @@ function AttendancePanel({
   const selectedEventID = eventID || events[0]?.id || "";
   const summary = useMemo(
     () =>
-      attendanceSummary(
+      attendanceDecisionSummary(
         Object.entries(records).map(([playerID, status]) => ({
           player_id: playerID,
           status,
           note: "",
           updated_at: "",
         })),
+        players.length,
       ),
-    [records],
+    [players.length, records],
   );
 
   useEffect(() => {
@@ -1416,8 +1478,10 @@ function AttendancePanel({
           </select>
         </label>
         <div className="summary-box">
-          <span>可用 {summary.ready}</span>
-          <span>不可用 {summary.blocked}</span>
+          <span className="available">参加 {summary.available}</span>
+          <span className="unavailable">拒绝 {summary.unavailable}</span>
+          <span className="tentative">待定 {summary.tentative}</span>
+          <span>未确认 {summary.unknown}</span>
         </div>
         <button className="primary-button" type="button" onClick={save}>
           <Save size={18} />

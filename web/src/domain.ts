@@ -2,6 +2,7 @@ export type AttendanceStatus =
   | "unknown"
   | "available"
   | "unavailable"
+  | "tentative"
   | "late"
   | "injured"
   | "present"
@@ -13,6 +14,13 @@ export type AttendanceRecord = {
   status: AttendanceStatus;
   note: string;
   updated_at: string;
+};
+
+export type AttendanceDecisionSummary = {
+  available: number;
+  unavailable: number;
+  tentative: number;
+  unknown: number;
 };
 
 export type SlotPosition = {
@@ -68,6 +76,27 @@ export function attendanceSummary(records: AttendanceRecord[]) {
     },
     { ready: 0, blocked: 0 },
   );
+}
+
+export function attendanceDecisionSummary(records: AttendanceRecord[], totalPlayers: number): AttendanceDecisionSummary {
+  const summary: AttendanceDecisionSummary = {
+    available: 0,
+    unavailable: 0,
+    tentative: 0,
+    unknown: 0,
+  };
+  for (const record of records) {
+    if (record.status === "available" || record.status === "late" || record.status === "present") {
+      summary.available += 1;
+    } else if (record.status === "unavailable" || record.status === "injured" || record.status === "absent" || record.status === "excused") {
+      summary.unavailable += 1;
+    } else if (record.status === "tentative") {
+      summary.tentative += 1;
+    }
+  }
+  const known = summary.available + summary.unavailable + summary.tentative;
+  summary.unknown = Math.max(0, totalPlayers - known);
+  return summary;
 }
 
 export function normalizeSlotPosition(position: SlotPosition): SlotPosition {
