@@ -350,6 +350,42 @@ func TestPlayerEventsIncludeOwnAttendanceOverview(t *testing.T) {
 	}
 }
 
+func TestCoachCanUpdateEventDateTime(t *testing.T) {
+	handler := newTestHandler(t)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	coachToken := jsonPath(t, login, "data.token").(string)
+
+	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
+		"type":      "training",
+		"title":     "周三控球训练",
+		"starts_at": "2026-05-13T20:00:00+08:00",
+		"ends_at":   "2026-05-13T22:00:00+08:00",
+	})
+	assertStatus(t, training, http.StatusOK)
+	eventID := jsonPath(t, training, "data.event.id").(string)
+
+	update := performJSONRequest(t, handler, http.MethodPatch, "/api/events/"+eventID, coachToken, map[string]any{
+		"starts_at": "2026-05-14T19:30:00+08:00",
+		"ends_at":   "2026-05-14T21:30:00+08:00",
+		"notes":     "改到周四晚",
+	})
+	assertStatus(t, update, http.StatusOK)
+	assertJSONEquals(t, update, "data.event.starts_at", "2026-05-14T19:30:00+08:00")
+	assertJSONEquals(t, update, "data.event.ends_at", "2026-05-14T21:30:00+08:00")
+	assertJSONEquals(t, update, "data.event.notes", "改到周四晚")
+
+	invalid := performJSONRequest(t, handler, http.MethodPatch, "/api/events/"+eventID, coachToken, map[string]any{
+		"starts_at": "2026-05-15T20:00:00+08:00",
+		"ends_at":   "2026-05-15T19:00:00+08:00",
+	})
+	assertStatus(t, invalid, http.StatusBadRequest)
+	assertJSONEquals(t, invalid, "error.code", "invalid_event")
+}
+
 func TestDefaultCoachPasswordCanComeFromEnvironment(t *testing.T) {
 	t.Setenv("ANYPITCH_COACH_PASSWORD", "CoachSecret@2026")
 	handler := newTestHandler(t)

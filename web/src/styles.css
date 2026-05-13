@@ -1186,6 +1186,13 @@ button.event-chip:focus-visible {
   gap: 10px;
 }
 
+.event-time-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(170px, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+}
+
 .inline-attendance-list {
   display: grid;
   gap: 8px;
@@ -1353,7 +1360,8 @@ button.event-chip:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .event-notes-editor {
+  .event-notes-editor,
+  .event-time-editor {
     grid-template-columns: 1fr;
   }
 

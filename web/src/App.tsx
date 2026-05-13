@@ -56,6 +56,7 @@ import {
   positionAfterDragDelta,
   splitEventsByTime,
   templatesForFormat,
+  toLocalDateTimeInput,
   toLocalDateKey,
   type TacticFormat,
 } from "./domain";
@@ -1221,6 +1222,8 @@ function CalendarPanel({
   const [newLocation, setNewLocation] = useState("");
   const [selectedEventID, setSelectedEventID] = useState("");
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
+  const [detailStartsAt, setDetailStartsAt] = useState("");
+  const [detailEndsAt, setDetailEndsAt] = useState("");
   const [detailNotes, setDetailNotes] = useState("");
   const [monthCursor, setMonthCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const monthDays = useMemo(() => buildMonthCalendar(monthCursor.getFullYear(), monthCursor.getMonth(), today), [monthCursor, today]);
@@ -1262,7 +1265,9 @@ function CalendarPanel({
 
   useEffect(() => {
     setDetailNotes(selectedEvent?.notes ?? "");
-  }, [selectedEvent?.id, selectedEvent?.notes]);
+    setDetailStartsAt(selectedEvent ? toLocalDateTimeInput(selectedEvent.starts_at) : "");
+    setDetailEndsAt(selectedEvent ? toLocalDateTimeInput(selectedEvent.ends_at) : "");
+  }, [selectedEvent?.id, selectedEvent?.starts_at, selectedEvent?.ends_at, selectedEvent?.notes]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1358,6 +1363,35 @@ function CalendarPanel({
     try {
       const result = await client.updateEvent(selectedEvent.id, { notes: detailNotes });
       onEventsChanged(events.map((event) => (event.id === result.event.id ? result.event : event)));
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
+  function changeDetailStartsAt(value: string) {
+    setDetailStartsAt(value);
+    if (detailEndsAt <= value) {
+      setDetailEndsAt(addHoursToLocalInput(value, 2));
+    }
+  }
+
+  async function saveEventSchedule() {
+    if (!selectedEvent) {
+      return;
+    }
+    try {
+      const result = await client.updateEvent(selectedEvent.id, {
+        starts_at: new Date(detailStartsAt).toISOString(),
+        ends_at: new Date(detailEndsAt).toISOString(),
+      });
+      onEventsChanged(events.map((event) => (event.id === result.event.id ? result.event : event)).sort((left, right) => left.starts_at.localeCompare(right.starts_at)));
+      const nextDate = toLocalDateKey(result.event.starts_at);
+      const next = parseDateKey(nextDate);
+      setSelectedDate(nextDate);
+      setMonthCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+      setDetailStartsAt(toLocalDateTimeInput(result.event.starts_at));
+      setDetailEndsAt(toLocalDateTimeInput(result.event.ends_at));
       onError("");
     } catch (err) {
       onError(messageFromError(err));
@@ -1518,6 +1552,30 @@ function CalendarPanel({
                   </small>
                 </div>
                 <span className={`event-type ${selectedEvent.type}`}>{selectedEvent.type === "training" ? "训练" : "友谊赛"}</span>
+              </div>
+              <div className="event-time-editor">
+                <label>
+                  开始时间
+                  <input
+                    value={detailStartsAt}
+                    onChange={(event) => changeDetailStartsAt(event.currentTarget.value)}
+                    onInput={(event) => changeDetailStartsAt(event.currentTarget.value)}
+                    type="datetime-local"
+                  />
+                </label>
+                <label>
+                  结束时间
+                  <input
+                    value={detailEndsAt}
+                    onChange={(event) => setDetailEndsAt(event.currentTarget.value)}
+                    onInput={(event) => setDetailEndsAt(event.currentTarget.value)}
+                    type="datetime-local"
+                  />
+                </label>
+                <button className="ghost-button" type="button" onClick={saveEventSchedule}>
+                  <Save size={18} />
+                  保存时间
+                </button>
               </div>
               <div className="event-notes-editor">
                 <label>

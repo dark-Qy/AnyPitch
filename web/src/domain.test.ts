@@ -18,6 +18,7 @@ import {
   splitEventsByTime,
   templatesForFormat,
   normalizeSlotPosition,
+  toLocalDateTimeInput,
 } from "./domain";
 
 describe("attendanceSummary", () => {
@@ -186,6 +187,12 @@ describe("player event attendance helpers", () => {
 
   it("formats event time ranges for compact calendar chips", () => {
     expect(eventTimeRange(events[1])).toBe("20:30-22:00");
+  });
+
+  it("formats server event times for datetime-local inputs", () => {
+    const localDate = new Date(2026, 4, 13, 20, 30);
+
+    expect(toLocalDateTimeInput(localDate.toISOString())).toBe("2026-05-13T20:30");
   });
 });
 

@@ -283,6 +283,16 @@ export function toLocalDateKey(value: string | Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function toLocalDateTimeInput(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
 function stripSlotSide(slotID: string) {
   return slotID.replace(/^(home|opponent):/, "");
 }

@@ -105,7 +105,9 @@ api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练"
 EVENT_ID="$(json_get "${SMOKE_DIR}/training.json" data.event.id)"
 [[ -n "${EVENT_ID}" ]]
 [[ "$(json_get "${SMOKE_DIR}/training.json" data.event.ends_at)" == "2026-05-13T22:00:00+08:00" ]]
-api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"notes":"训练内容：压迫、定位球、防守转换"}' "${SMOKE_DIR}/training-update.json"
+api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"starts_at":"2026-05-14T19:30:00+08:00","ends_at":"2026-05-14T21:30:00+08:00","notes":"训练内容：压迫、定位球、防守转换"}' "${SMOKE_DIR}/training-update.json"
+[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.starts_at)" == "2026-05-14T19:30:00+08:00" ]]
+[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.ends_at)" == "2026-05-14T21:30:00+08:00" ]]
 [[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.notes)" == "训练内容：压迫、定位球、防守转换" ]]
 
 echo "==> create friendly"
