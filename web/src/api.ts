@@ -193,6 +193,10 @@ export class APIClient {
     });
   }
 
+  deleteEvent(eventID: string) {
+    return this.request<{ ok: boolean }>(`/api/events/${eventID}`, { method: "DELETE" });
+  }
+
   listAttendance(eventID: string) {
     return this.request<{ records: AttendanceRecord[] }>(`/api/events/${eventID}/attendance`);
   }

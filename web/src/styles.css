@@ -464,6 +464,16 @@ p {
   min-width: 92px;
 }
 
+.danger-button {
+  color: var(--paper);
+  background: var(--danger);
+}
+
+.danger-button:hover,
+.danger-button:focus-visible {
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
 .pitch-shell {
   padding: 18px;
   overflow-x: auto;
@@ -1165,6 +1175,13 @@ button.event-chip:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.event-detail-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
 }
 
 .event-detail-head strong,

@@ -1398,6 +1398,24 @@ function CalendarPanel({
     }
   }
 
+  async function deleteSelectedEvent() {
+    if (!selectedEvent) {
+      return;
+    }
+    try {
+      await client.deleteEvent(selectedEvent.id);
+      onEventsChanged(events.filter((event) => event.id !== selectedEvent.id));
+      setSelectedEventID("");
+      setRecords({});
+      setDetailStartsAt("");
+      setDetailEndsAt("");
+      setDetailNotes("");
+      onError("");
+    } catch (err) {
+      onError(messageFromError(err));
+    }
+  }
+
   async function addLocation() {
     const name = newLocation.trim();
     if (!name) {
@@ -1551,7 +1569,18 @@ function CalendarPanel({
                     {formatDateRange(selectedEvent.starts_at, selectedEvent.ends_at)} · {selectedEvent.location}
                   </small>
                 </div>
-                <span className={`event-type ${selectedEvent.type}`}>{selectedEvent.type === "training" ? "训练" : "友谊赛"}</span>
+                <div className="event-detail-actions">
+                  <span className={`event-type ${selectedEvent.type}`}>{selectedEvent.type === "training" ? "训练" : "友谊赛"}</span>
+                  <button
+                    className="ghost-button danger-button icon-button"
+                    type="button"
+                    onClick={deleteSelectedEvent}
+                    aria-label={`删除 ${selectedEvent.title}`}
+                    title="删除日程"
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
               </div>
               <div className="event-time-editor">
                 <label>

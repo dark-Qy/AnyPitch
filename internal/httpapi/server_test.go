@@ -386,6 +386,35 @@ func TestCoachCanUpdateEventDateTime(t *testing.T) {
 	assertJSONEquals(t, invalid, "error.code", "invalid_event")
 }
 
+func TestCoachCanDeleteEvent(t *testing.T) {
+	handler := newTestHandler(t)
+
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{
+		"password": "AnyPitch@2026",
+	})
+	assertStatus(t, login, http.StatusOK)
+	coachToken := jsonPath(t, login, "data.token").(string)
+
+	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
+		"type":      "training",
+		"title":     "待删除训练",
+		"starts_at": "2026-05-13T20:00:00+08:00",
+		"ends_at":   "2026-05-13T22:00:00+08:00",
+	})
+	assertStatus(t, training, http.StatusOK)
+	eventID := jsonPath(t, training, "data.event.id").(string)
+
+	deleted := performJSONRequest(t, handler, http.MethodDelete, "/api/events/"+eventID, coachToken, nil)
+	assertStatus(t, deleted, http.StatusOK)
+	assertJSONEquals(t, deleted, "data.ok", true)
+
+	events := performJSONRequest(t, handler, http.MethodGet, "/api/events", coachToken, nil)
+	assertStatus(t, events, http.StatusOK)
+	if got := jsonPath(t, events, "data.events"); len(got.([]any)) != 0 {
+		t.Fatalf("expected deleted event to be absent, got %s", events.Body.String())
+	}
+}
+
 func TestDefaultCoachPasswordCanComeFromEnvironment(t *testing.T) {
 	t.Setenv("ANYPITCH_COACH_PASSWORD", "CoachSecret@2026")
 	handler := newTestHandler(t)

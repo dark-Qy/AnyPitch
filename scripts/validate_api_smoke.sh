@@ -113,6 +113,8 @@ api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"starts_at":"2026-05-14T19:30:0
 echo "==> create friendly"
 api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","starts_at":"2026-05-16T18:00:00+08:00","ends_at":"2026-05-16T20:00:00+08:00","location":"北京邮电大学（沙河校区）","opponent":"Blue FC","notes":"八人制"}' "${SMOKE_DIR}/friendly.json"
 [[ "$(json_get "${SMOKE_DIR}/friendly.json" data.event.type)" == "friendly" ]]
+FRIENDLY_ID="$(json_get "${SMOKE_DIR}/friendly.json" data.event.id)"
+[[ -n "${FRIENDLY_ID}" ]]
 
 echo "==> attendance"
 api PUT "/api/events/${EVENT_ID}/attendance" "${TOKEN}" "{\"records\":[{\"player_id\":\"${PLAYER_ID}\",\"status\":\"available\",\"note\":\"准时\"}]}" "${SMOKE_DIR}/attendance.json"
@@ -134,6 +136,10 @@ api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status"
 api GET /api/player/events "${PLAYER_TOKEN}" "" "${SMOKE_DIR}/player-events-updated.json"
 [[ "$(json_get "${SMOKE_DIR}/player-events-updated.json" data.attendance_records.0.status)" == "tentative" ]]
 [[ "$(json_get "${SMOKE_DIR}/player-events-updated.json" data.attendance_summary.tentative)" == "1" ]]
+
+echo "==> delete friendly"
+api DELETE "/api/events/${FRIENDLY_ID}" "${TOKEN}" "" "${SMOKE_DIR}/friendly-delete.json"
+[[ "$(json_get "${SMOKE_DIR}/friendly-delete.json" data.ok)" == "true" ]]
 
 echo "==> tactic templates"
 api GET /api/tactics/templates "${TOKEN}" "" "${SMOKE_DIR}/templates.json"
