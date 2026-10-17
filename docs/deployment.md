@@ -96,4 +96,4 @@ APP_DB_PATH=/srv/anypitch/data/anypitch.db ./scripts/production_preflight.sh
 
 ## 2026-10-17 分享与头像开发版
 
-小程序 0.2.19 已上传开发版；头像接口尚未部署到生产，微信后台审核和公开发布均未完成。见 [交付状态](deployment-2026-10-17.md)。
+小程序 0.2.19 已上传开发版，配套服务端已切换到 `20261017-v0219`；微信后台审核和公开发布均未完成。见 [交付状态](deployment-2026-10-17.md)。
