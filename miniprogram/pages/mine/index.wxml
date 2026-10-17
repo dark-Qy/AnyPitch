@@ -4,7 +4,7 @@
       <view class="profile-identity"><view class="profile-name">{{player.profile_complete ? player.name : '完善资料'}}</view><view wx:if="{{!player.profile_complete}}" class="profile-status" bindtap="edit">设置昵称后即可报名 <image src="/assets/icons/chevron-dark.svg"/></view></view>
       <button class="edit-link" bindtap="edit"><text>修改</text><image src="/assets/icons/chevron-dark.svg"/></button>
     </view>
-    <view class="training-stat"><text class="training-number">{{participationCount}}</text><text>训练＋友谊赛报名</text></view>
+    <view class="training-stat"><text class="training-number">{{participationCount}}</text><text class="training-stat-label">次参与活动</text></view>
   </view>
   <view class="mine-content">
     <view wx:if="{{error && !editing}}" class="error">{{error}}<button bindtap="load">重试</button></view>

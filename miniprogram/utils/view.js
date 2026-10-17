@@ -18,7 +18,7 @@ function eventRows(events, records, now = Date.now()) {
   return (events || []).map(e => ({ ...e, ...eventDateParts(e.starts_at), typeLabel: eventDesign(e.type).label, typeIcon: eventDesign(e.type).icon, typeTone: eventDesign(e.type).tone, timeText: `${dateText(e.starts_at)} — ${dateText(e.ends_at)}`, status: byID[e.id] || 'unknown', ended: new Date(e.ends_at).getTime() <= now, cancelled: Boolean(e.cancelled_at) })).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
 }
 function participationCount(history) {
-  return (history || []).filter(row => (row.type === 'training' || row.type === 'friendly') && row.rsvp_status === 'available' && !row.cancelled_at).length;
+  return (history || []).filter(row => row.rsvp_status === 'available' && !row.cancelled_at).length;
 }
 function requireSession(returnTo) {
   if (api.session()) return true;

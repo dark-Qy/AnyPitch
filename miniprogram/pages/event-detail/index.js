@@ -46,7 +46,6 @@ Page({
       if (this.active && seq === this.shareImageSeq && this.data.event && this.data.event.id === event.id) this.setData({ shareImagePath: imagePath });
     } catch (_) { if (this.active && seq === this.shareImageSeq) this.setData({ shareImagePath: '' }); }
   },
-  retryShareImage() { if (this.data.event) this.prepareShareImage(this.data.event); },
   async rsvp(event) {
     if (this.data.saving || !this.data.event) return;
     if (!this.data.profileComplete) { this.completeProfile(); return; }
