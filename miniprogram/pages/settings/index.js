@@ -1,12 +1,13 @@
 const api = require('../../utils/api');
 const view = require('../../utils/view');
-const version = require('../../utils/version');
 Page({
  onReady() { getApp().initTitleFont(); },
-  data: { player: {}, version, error: '', diagnostics: false },
+  data: { player: {}, version: '', error: '', diagnostics: false },
   async onShow() {
     if (!view.requireSession()) return;
-    this.setData({ error: '', diagnostics: false }); this.versionTaps = 0; this.lastVersionTap = 0;
+    const miniProgram = wx.getAccountInfoSync().miniProgram;
+    const version = miniProgram.version || ({ develop: '开发版', trial: '体验版' }[miniProgram.envVersion] || '未知版本');
+    this.setData({ version, error: '', diagnostics: false }); this.versionTaps = 0; this.lastVersionTap = 0;
     try { this.setData({ player: await api.refreshMe() }); } catch (e) { view.fail(this, e); }
   },
   versionTap() {
