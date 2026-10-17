@@ -564,6 +564,10 @@ func (h *Handler) playerEventAttendance(w http.ResponseWriter, r *http.Request, 
 		}
 		record, err := h.attendance.SaveForPlayer(ctx.teamID, eventID, ctx.player.ID, input.Status)
 		if err != nil {
+			if errors.Is(err, attendance.ErrEventEnded) {
+				writeError(w, http.StatusConflict, "event_ended", "活动已结束，不能修改报名")
+				return
+			}
 			if errors.Is(err, attendance.ErrEventCancelled) {
 				writeError(w, 409, "event_cancelled", "活动已取消，不能报名")
 				return

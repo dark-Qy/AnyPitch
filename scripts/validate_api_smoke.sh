@@ -108,17 +108,17 @@ PYFIX
 PLAYER_ID="$(json_get "${SMOKE_DIR}/player.json" data.player.id)"
 
 echo "==> create training"
-api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练","starts_at":"2026-05-13T20:00:00+08:00","ends_at":"2026-05-13T22:00:00+08:00","location":"北京邮电大学（海淀校区）","opponent":"","notes":"小场压迫"}' "${SMOKE_DIR}/training.json"
+api POST /api/events "${TOKEN}" '{"type":"training","title":"周三控球训练","starts_at":"2099-05-13T20:00:00+08:00","ends_at":"2099-05-13T22:00:00+08:00","location":"北京邮电大学（海淀校区）","opponent":"","notes":"小场压迫"}' "${SMOKE_DIR}/training.json"
 EVENT_ID="$(json_get "${SMOKE_DIR}/training.json" data.event.id)"
 [[ -n "${EVENT_ID}" ]]
-[[ "$(json_get "${SMOKE_DIR}/training.json" data.event.ends_at)" == "2026-05-13T22:00:00+08:00" ]]
-api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"starts_at":"2026-05-14T19:30:00+08:00","ends_at":"2026-05-14T21:30:00+08:00","notes":"训练内容：压迫、定位球、防守转换"}' "${SMOKE_DIR}/training-update.json"
-[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.starts_at)" == "2026-05-14T19:30:00+08:00" ]]
-[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.ends_at)" == "2026-05-14T21:30:00+08:00" ]]
+[[ "$(json_get "${SMOKE_DIR}/training.json" data.event.ends_at)" == "2099-05-13T22:00:00+08:00" ]]
+api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"starts_at":"2099-05-14T19:30:00+08:00","ends_at":"2099-05-14T21:30:00+08:00","notes":"训练内容：压迫、定位球、防守转换"}' "${SMOKE_DIR}/training-update.json"
+[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.starts_at)" == "2099-05-14T19:30:00+08:00" ]]
+[[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.ends_at)" == "2099-05-14T21:30:00+08:00" ]]
 [[ "$(json_get "${SMOKE_DIR}/training-update.json" data.event.notes)" == "训练内容：压迫、定位球、防守转换" ]]
 
 echo "==> create friendly"
-api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","starts_at":"2026-05-16T18:00:00+08:00","ends_at":"2026-05-16T20:00:00+08:00","location":"北京邮电大学（沙河校区）","opponent":"Blue FC","notes":"八人制"}' "${SMOKE_DIR}/friendly.json"
+api POST /api/events "${TOKEN}" '{"type":"friendly","title":"周末友谊赛","starts_at":"2099-05-16T18:00:00+08:00","ends_at":"2099-05-16T20:00:00+08:00","location":"北京邮电大学（沙河校区）","opponent":"Blue FC","notes":"八人制"}' "${SMOKE_DIR}/friendly.json"
 [[ "$(json_get "${SMOKE_DIR}/friendly.json" data.event.type)" == "friendly" ]]
 FRIENDLY_ID="$(json_get "${SMOKE_DIR}/friendly.json" data.event.id)"
 [[ -n "${FRIENDLY_ID}" ]]
@@ -154,6 +154,18 @@ api POST /api/events "${TOKEN}" '{"type":"pickup","title":"周末野球","starts
 api POST /api/player/events "${PLAYER_TOKEN}" '{"type":"pickup","title":"成员发布","starts_at":"2026-05-18T19:00:00+08:00"}' "${SMOKE_DIR}/blocked-pickup.json"
 [[ "$(json_get "${SMOKE_DIR}/blocked-pickup.json" error.code)" == "forbidden" ]]
 api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status":"available"}' "${SMOKE_DIR}/player-attendance.json"
+python3 - "${DB_PATH}" "${EVENT_ID}" <<'PYARCHIVE'
+import datetime, sqlite3, sys
+conn = sqlite3.connect(sys.argv[1])
+start = datetime.datetime.fromisoformat("2026-05-14T19:30:00+08:00")
+conn.execute("UPDATE events SET starts_at = ?, ends_at = ? WHERE id = ?", (start.isoformat(), (start + datetime.timedelta(hours=2)).isoformat(), sys.argv[2]))
+conn.commit()
+conn.close()
+PYARCHIVE
+api PUT "/api/player/events/${EVENT_ID}/attendance" "${PLAYER_TOKEN}" '{"status":"tentative"}' "${SMOKE_DIR}/ended-attendance.json"
+[[ "$(json_get "${SMOKE_DIR}/ended-attendance.json" error.code)" == "event_ended" ]]
+api PATCH "/api/events/${EVENT_ID}" "${TOKEN}" '{"title":"教练可修改历史活动"}' "${SMOKE_DIR}/ended-coach-update.json"
+[[ "$(json_get "${SMOKE_DIR}/ended-coach-update.json" data.event.title)" == "教练可修改历史活动" ]]
 api POST /api/terms "${TOKEN}" '{"name":"2026年春季学期","starts_on":"2026-02-01","ends_on":"2026-07-31"}' "${SMOKE_DIR}/term.json"
 TERM_ID="$(json_get "${SMOKE_DIR}/term.json" data.term.id)"
 [[ -n "${TERM_ID}" ]]

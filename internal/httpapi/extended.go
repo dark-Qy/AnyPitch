@@ -157,6 +157,7 @@ func (h *Handler) playerStatsMe(w http.ResponseWriter, r *http.Request, ctx play
 	}
 	filter := historyFilter(r)
 	filter.PlayerID = ctx.player.ID
+	filter.Personal = true
 	history, err := h.stats.History(ctx.teamID, filter)
 	if err != nil {
 		writeStatsError(w, err)

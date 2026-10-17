@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -140,7 +141,7 @@ func TestNewWeChatMemberCanBrowseBeforeCompletingProfile(t *testing.T) {
 	coach := performJSONRequest(t, handler, http.MethodPost, "/api/auth/login", "", map[string]any{"password": "AnyPitch@2026"})
 	coachToken := jsonPath(t, coach, "data.token").(string)
 	event := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
-		"type": "friendly", "title": "周末友谊赛", "starts_at": "2026-10-13T20:00:00+08:00",
+		"type": "friendly", "title": "周末友谊赛", "starts_at": "2099-10-13T20:00:00+08:00",
 	})
 	assertStatus(t, event, http.StatusOK)
 	eventID := jsonPath(t, event, "data.event.id").(string)
@@ -221,7 +222,7 @@ func TestWeChatMemberOnlyManagesOwnAttendance(t *testing.T) {
 	training := performJSONRequest(t, handler, http.MethodPost, "/api/events", coachToken, map[string]any{
 		"type":      "training",
 		"title":     "周三控球训练",
-		"starts_at": "2026-05-13T20:00:00+08:00",
+		"starts_at": "2099-05-13T20:00:00+08:00",
 	})
 	assertStatus(t, training, http.StatusOK)
 	eventID := jsonPath(t, training, "data.event.id").(string)
@@ -277,6 +278,74 @@ func TestWeChatMemberOnlyManagesOwnAttendance(t *testing.T) {
 
 	forbidden := performJSONRequest(t, handler, http.MethodGet, "/api/players", playerToken, nil)
 	assertStatus(t, forbidden, http.StatusUnauthorized)
+}
+
+func TestPersonalHistoryUsesCurrentDatabaseStatusAndCoachCanEditPastEvents(t *testing.T) {
+	h := newTestHandler(t)
+	coach := performJSONRequest(t, h, http.MethodPost, "/api/auth/login", "", map[string]any{"password": "AnyPitch@2026"})
+	coachToken := jsonPath(t, coach, "data.token").(string)
+	joinedAt := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	createEvent := func(title string, startsAt time.Time) string {
+		t.Helper()
+		response := performJSONRequest(t, h, http.MethodPost, "/api/events", coachToken, map[string]any{
+			"type": "training", "title": title, "starts_at": startsAt.Format(time.RFC3339),
+		})
+		assertStatus(t, response, http.StatusOK)
+		return jsonPath(t, response, "data.event.id").(string)
+	}
+	beforeID := createEvent("入队前活动", joinedAt.Add(-24*time.Hour))
+	afterID := createEvent("入队后活动", joinedAt.Add(12*time.Hour))
+	unknownID := createEvent("未确认活动", joinedAt.Add(24*time.Hour))
+
+	member := createFixturePlayer(t, h, map[string]any{"name": "队员"})
+	assertStatus(t, member, http.StatusOK)
+	playerID := jsonPath(t, member, "data.player.id").(string)
+	if _, err := h.(*fixtureHandler).db.Exec(`UPDATE players SET created_at = ? WHERE id = ?`, joinedAt.Format(time.RFC3339), playerID); err != nil {
+		t.Fatal(err)
+	}
+	login := performJSONRequest(t, h, http.MethodPost, "/api/auth/wechat", "", map[string]any{"code": playerID})
+	assertStatus(t, login, http.StatusOK)
+	playerToken := jsonPath(t, login, "data.token").(string)
+
+	setStatus := func(eventID, status string) {
+		t.Helper()
+		response := performJSONRequest(t, h, http.MethodPut, "/api/events/"+eventID+"/attendance", coachToken, map[string]any{
+			"records": []map[string]any{{"player_id": playerID, "status": status}},
+		})
+		assertStatus(t, response, http.StatusOK)
+	}
+	setStatus(beforeID, "available")
+	setStatus(afterID, "tentative")
+	setStatus(unknownID, "unknown")
+
+	all := performJSONRequest(t, h, http.MethodGet, "/api/player/events", playerToken, nil)
+	assertStatus(t, all, http.StatusOK)
+	if got := len(jsonPath(t, all, "data.events").([]any)); got != 3 {
+		t.Fatalf("expected complete team history, got %d events", got)
+	}
+	personal := performJSONRequest(t, h, http.MethodGet, "/api/player/stats/me", playerToken, nil)
+	assertStatus(t, personal, http.StatusOK)
+	if got := len(jsonPath(t, personal, "data.history").([]any)); got != 1 {
+		t.Fatalf("expected one post-join confirmed event, got %d: %s", got, personal.Body.String())
+	}
+	assertJSONEquals(t, personal, "data.history.0.event_id", afterID)
+
+	edited := performJSONRequest(t, h, http.MethodPatch, "/api/events/"+afterID, coachToken, map[string]any{"title": "教练修改的历史活动"})
+	assertStatus(t, edited, http.StatusOK)
+	setStatus(afterID, "unknown")
+	personal = performJSONRequest(t, h, http.MethodGet, "/api/player/stats/me", playerToken, nil)
+	assertStatus(t, personal, http.StatusOK)
+	if got := len(jsonPath(t, personal, "data.history").([]any)); got != 0 {
+		t.Fatalf("expected current unknown status to disappear, got %s", personal.Body.String())
+	}
+	setStatus(afterID, "available")
+	personal = performJSONRequest(t, h, http.MethodGet, "/api/player/stats/me", playerToken, nil)
+	assertJSONEquals(t, personal, "data.history.0.title", "教练修改的历史活动")
+	assertJSONEquals(t, personal, "data.history.0.rsvp_status", "available")
+
+	blocked := performJSONRequest(t, h, http.MethodPut, "/api/player/events/"+afterID+"/attendance", playerToken, map[string]any{"status": "unavailable"})
+	assertStatus(t, blocked, http.StatusConflict)
+	assertJSONEquals(t, blocked, "error.code", "event_ended")
 }
 
 func TestPlayerEventsIncludeOwnAttendanceOverview(t *testing.T) {

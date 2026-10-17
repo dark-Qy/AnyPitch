@@ -10,6 +10,7 @@ import (
 var (
 	ErrInvalidAttendance = errors.New("invalid attendance")
 	ErrEventCancelled    = errors.New("event cancelled")
+	ErrEventEnded        = errors.New("event has ended")
 )
 
 type Record struct {
@@ -143,8 +144,16 @@ func (s *Service) SaveForPlayer(teamID, eventID, playerID, status string) (Recor
 	if !validStatus(status) {
 		return Record{}, ErrInvalidAttendance
 	}
-	if _, _, err := s.eventTiming(teamID, eventID); err != nil {
+	_, endsAt, err := s.eventTiming(teamID, eventID)
+	if err != nil {
 		return Record{}, err
+	}
+	end, err := time.Parse(time.RFC3339, endsAt)
+	if err != nil {
+		return Record{}, err
+	}
+	if !end.After(time.Now()) {
+		return Record{}, ErrEventEnded
 	}
 
 	tx, err := s.db.Begin()

@@ -63,6 +63,7 @@ type Leaderboard struct {
 
 type HistoryFilter struct {
 	PlayerID string
+	Personal bool
 	Type     string
 	From     string
 	To       string
@@ -213,6 +214,9 @@ func (s *Service) History(teamID string, filter HistoryFilter) ([]HistoryRow, er
 	if filter.PlayerID != "" {
 		query += ` AND p.id = ?`
 		args = append(args, filter.PlayerID)
+	}
+	if filter.Personal {
+		query += ` AND unixepoch(e.starts_at) >= unixepoch(p.created_at) AND a.status <> 'unknown'`
 	}
 	query += ` ORDER BY e.starts_at DESC, p.name, p.id`
 	rows, err := s.db.Query(query, args...)
