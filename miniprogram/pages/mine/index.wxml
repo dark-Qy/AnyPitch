@@ -1,0 +1,40 @@
+<view class="page mine-page"><team-brand/>
+  <view class="profile-hero">
+    <view class="profile-main"><view class="profile-avatar"><image wx:if="{{avatarPath}}" src="{{avatarPath}}" mode="aspectFill"/><text wx:else>{{initial}}</text></view>
+      <view class="profile-identity"><view class="profile-name">{{player.profile_complete ? player.name : '完善资料'}}</view><view wx:if="{{!player.profile_complete}}" class="profile-status" bindtap="edit">设置昵称后即可报名 <image src="/assets/icons/chevron-dark.svg"/></view></view>
+      <button class="edit-link" bindtap="edit"><text>修改</text><image src="/assets/icons/chevron-dark.svg"/></button>
+    </view>
+    <view class="training-stat"><text class="training-number">{{participationCount}}</text><text>训练＋友谊赛报名</text></view>
+  </view>
+  <view class="mine-content">
+    <view wx:if="{{error && !editing}}" class="error">{{error}}<button bindtap="load">重试</button></view>
+    <view class="mine-menu">
+      <button class="menu-item" bindtap="topics"><view class="menu-icon-box"><image src="/assets/icons/trophy-dark.svg"/></view><text class="grow">赛事专题</text><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
+      <button class="menu-item" bindtap="settings"><view class="menu-icon-box"><image src="/assets/icons/settings-dark.svg"/></view><text class="grow">设置</text><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
+      <button class="menu-item" open-type="share"><view class="menu-icon-box"><image src="/assets/icons/invite-dark.svg"/></view><text class="grow">邀请队友</text><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
+    </view>
+    <view class="mine-activity">
+      <view class="section-heading"><text>我的活动</text><button class="text-button" bindtap="events">全部 <image src="/assets/icons/chevron-dark.svg"/></button></view>
+      <view wx:if="{{loading}}" class="loading">加载中…</view>
+      <view wx:elif="{{!recentHistory.length}}" class="history-empty">暂无报名记录</view>
+      <view wx:else class="record-list">
+        <view class="record" wx:for="{{recentHistory}}" wx:key="event_id" data-id="{{item.event_id}}" bindtap="open">
+          <image class="record-cover" src="{{item.typeIcon}}" mode="aspectFit"/>
+          <view class="record-body"><view class="record-title">{{item.title}}</view><view class="record-meta"><image src="/assets/icons/calendar-dark.svg"/>{{item.timeText}}</view><view class="record-meta"><image src="/assets/icons/pin-dark.svg"/>{{item.location}}</view></view>
+          <text class="record-badge {{item.cancelled_at || item.ended ? 'is-ended' : item.rsvp_status === 'available' ? 'is-registered' : 'is-other'}}">{{item.cancelled_at ? '已取消' : item.ended ? '已结束' : item.rsvp_status === 'available' ? '已报名' : item.rsvpText}}</text>
+          <image class="record-chevron" src="/assets/icons/chevron-dark.svg"/>
+        </view>
+      </view>
+    </view>
+  </view>
+  <view wx:if="{{editing}}" class="edit-backdrop" catchtap="closeEdit">
+    <view class="edit-sheet" catchtap="stop">
+      <view class="sheet-handle"></view>
+      <view class="sheet-heading"><text>修改资料</text><button bindtap="closeEdit"><image src="/assets/icons/close-dark.svg"/></button></view>
+      <view class="editor-avatar"><image wx:if="{{avatarPath}}" src="{{avatarPath}}" mode="aspectFill"/><text wx:else>{{initial}}</text></view>
+      <button class="change-avatar" bindtap="chooseAvatar" disabled="{{uploadingAvatar}}" loading="{{uploadingAvatar}}">{{avatarPath ? '更换头像' : '上传头像'}}</button>
+      <view wx:if="{{avatarStatus}}" class="avatar-status">{{avatarStatus}}</view>
+      <form class="profile-form" bindsubmit="saveProfile"><view class="name-field"><text>昵称</text><view class="name-input"><input name="nickname" type="nickname" value="{{player.name}}" placeholder="输入昵称" maxlength="40"/><image src="/assets/icons/pencil-dark.svg"/></view></view><view wx:if="{{error}}" class="sheet-error">{{error}}</view><button class="save-button" form-type="submit" loading="{{saving}}" disabled="{{saving}}">保存</button></form>
+    </view>
+  </view>
+</view>

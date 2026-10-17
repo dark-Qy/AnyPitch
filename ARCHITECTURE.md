@@ -1,53 +1,53 @@
 # ARCHITECTURE.md
 
-## Purpose
+代码是 AnyPitch 的行为真相。本文件记录当前稳定边界，避免前端复制业务判断或把专题和训练报名混在一起。
 
-本文件记录 AnyPitch 长期稳定边界。代码仍是接口和行为真相源。
+## 分层
 
-## Stable Layers
+- `cmd/server/`：读取 `APP_DB_PATH`、`ANYPITCH_UPLOAD_DIR`、`HTTP_ADDR`，启动 HTTP 服务。
+- `internal/db/`：在实际 SQLite 连接上启用外键并创建当前 schema。
+- `internal/auth/`：教练密码、微信成员注册、独立 session 和 Bearer token 校验。
+- `internal/player/`：队员 CRUD、停用与引用删除限制。
+- `internal/event/`：`training`、`friendly`、`pickup` 活动和可恢复的取消记录。
+- `internal/attendance/`：四状态报名和逐场局部更新。
+- `internal/stats/`：学期、训练榜、历史和 CSV。
+- `internal/specialactivity/`：校长杯等独立短期专题及其条目。
+- `internal/media/`：相册元数据、图片解码压缩、私有文件读取和删除清理。
+- `internal/tactics/`：5/8/11 人制模板和双方拖拽站位。
+- `internal/httpapi/`：JSON envelope、角色路由、team 授权和静态前端服务。
+- `web/`：React/Vite 的响应式交互和展示层。
+- `miniprogram/`：微信原生队员端，通过同一 Go API 查看活动与专题、提交固定状态报名、查看记录和训练榜；不复制统计业务。
 
-- 服务入口层：`cmd/server/` 负责启动、读取 `APP_DB_PATH` / `HTTP_ADDR` 并装配 HTTP handler
-- SQLite 基础层：`internal/db/` 负责迁移 `users`、`auth_sessions`、`player_sessions`、`teams`、`players`、`events`、`event_locations`、`attendance_records`、`tactic_boards`
-- 鉴权层：`internal/auth/` 负责默认教练初始化、环境变量密码、教练密码登录、队员姓名登录、session 创建、Bearer token 校验和登出
-- 队员层：`internal/player/` 负责队员 CRUD 和位置标签归一化
-- 日程层：`internal/event/` 负责 `training` / `friendly` 日程、开始/结束时间段和常用地点
-- 出勤层：`internal/attendance/` 负责事件维度的队员出勤状态
-- 战术层：`internal/tactics/` 负责 5/8/11 人制多模板、稳定模板 ID、我方/对手站位 slots 和战术板保存
-- HTTP 边界层：`internal/httpapi/` 负责 API envelope、路由、JSON 输入输出和用户隔离
-- 前端层：`web/` 负责 React/Vite 响应式工作台和战术板拖拽 UI
+## 业务真相
 
-## Non-Negotiable Boundaries
+### 报名与训练榜
 
-- 客户端不直接读写 SQLite
-- 公共 API 使用统一 envelope：成功 `{data}`，失败 `{error:{code,message}}`
-- 第一版数据隔离以登录教练的默认 team 为边界
-- 教练接口必须使用教练 session；队员 session 只能访问 `/api/player/*` 自助接口
-- 手机端是响应式 Web，不引入 PWA、service worker 或原生壳
-- 新增公共字段或 schema 变更需同步 README、ARCHITECTURE、FRONTEND、相关 product spec 和 CHANGELOG
+- `attendance_records` 只表达 `available`、`unavailable`、`tentative`、`unknown` 报名和备注。
+- 教练和队员都按「活动 × 队员」局部写入；前端不能整表覆盖其他人的报名。
+- 取消活动保留报名和相册，但停止报名并退出统计；有引用的活动使用取消而非硬删除。
 
-## Tactics Board Schema
+### 统计与专题
 
-- `TacticTemplate.id` 是稳定模板标识，前端用它处理赛制/模板联动
-- `TacticSlot.side` 可为 `home` 或 `opponent`，旧数据缺省时按 `home` 处理
-- `tactic_boards` 持久化 `template_id`、`opponent_template_id` 和 `opponent_formation`，用于复原双方站位上下文
+- 月榜按 `Asia/Shanghai` 的活动开始时间归属；学期以教练维护的起止日期计算，不能重叠。
+- 训练榜只统计微信成员在未取消的 `training` 与 `friendly` 活动的 `available` 报名次数。野球和校长杯不计入。
+- 校长杯存于 `special_activities` 和 `special_activity_entries`，不绑定日常活动，不伪造出勤。
 
-## Event Schema
+### 相册
 
-- `events.starts_at` 和 `events.ends_at` 共同表达训练或友谊赛时间段，旧数据缺少结束时间时按开始后两小时兜底
-- `events.location` 未填写时使用 `北京邮电大学（海淀校区）`
-- `events.notes` 保存训练内容、注意事项或友谊赛备注，允许为空
-- `event_locations` 保存当前 team 的常用地点，启动时确保默认地点存在
+- 一个相册只属于一场活动或一届专题；SQLite 仅保存元数据，文件在 `ANYPITCH_UPLOAD_DIR`。
+- 服务端只接受 JPEG/PNG/WebP，每请求最大 6MB、最多 2500 万像素，重编码 JPEG 并生成缩略图；单队总空间初始上限 5GB。
+- 图片通过需 Bearer token 的 API 读取。现有成员相册内容在网页端只读；仅网页管理员会话可建立相册、上传、修改或删除照片。
+- 删除先标记不可见，再清理文件；遇到文件清理失败可再次删除同一照片继续清理。
 
-## Attendance Schema
+## API 和授权
 
-- 队员自助状态包含 `unknown`（未确认）/ `available`（参加）/ `unavailable`（拒绝）/ `tentative`（待定）
-- 队员端只返回全队状态汇总，不暴露其他队员的个人选择明细
-- `GET /api/player/events` 在 `events` 外返回当前队员自己的 `attendance_records` 和 `attendance_summary`，其中 `attendance_records` 带 `event_id`，缺失记录按 `unknown` 计入汇总
+- 成功响应为 `{data}`，错误为 `{error:{code,message}}`。
+- 网页管理员接口位于 `/api/*`，微信成员自助接口位于 `/api/player/*`；成员可维护自己的昵称、头像和固定报名状态，活动创建及相册写入由服务端拒绝。头像上传经图片校验和异步审核后才替换原头像。
+- `/api/stats/history.csv` 只对教练开放，且 CSV 字段会处理可能被 Excel 作为公式的开头字符。
+- 静态前端从服务进程工作目录下的 `web/dist` 提供。发布目录必须保留该相对路径。
 
-## Auth Schema
+## 不在范围内
 
-- 默认教练邮箱固定为 `coach@anypitch.local`
-- 教练登录只需要提交密码，默认邮箱仅作为内部用户身份
-- 默认教练密码优先读取 `ANYPITCH_COACH_PASSWORD`，未设置时使用 `AnyPitch@2026`
-- 启动时如果默认教练已存在，也会把密码哈希同步到当前环境变量值
-- 队员 session 存在 `player_sessions`，只绑定 `team_id` 和 `player_id`
+- 多球队或俱乐部管理、赛事淘汰树、积分系统、通知和日历订阅。
+- PWA、原生壳和视频/HEIC 转码服务。
+- 旧九状态报名的自动映射或自动生成历史实到。

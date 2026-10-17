@@ -38,14 +38,17 @@ type Session struct {
 }
 
 type PlayerIdentity struct {
-	ID        string   `json:"id"`
-	TeamID    string   `json:"team_id,omitempty"`
-	Name      string   `json:"name"`
-	Number    *int     `json:"number"`
-	Positions []string `json:"positions"`
-	Status    string   `json:"status"`
-	CreatedAt string   `json:"created_at"`
-	UpdatedAt string   `json:"updated_at"`
+	Role            string   `json:"role"`
+	ProfileComplete bool     `json:"profile_complete"`
+	HasAvatar       bool     `json:"has_avatar"`
+	ID              string   `json:"id"`
+	TeamID          string   `json:"team_id,omitempty"`
+	Name            string   `json:"name"`
+	Number          *int     `json:"number"`
+	Positions       []string `json:"positions"`
+	Status          string   `json:"status"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
 }
 
 type PlayerSession struct {
@@ -125,21 +128,6 @@ func (s *Service) Login(password string) (Session, error) {
 	return s.createSession(user)
 }
 
-func (s *Service) LoginPlayerByName(name string) (PlayerSession, error) {
-	playerName := strings.TrimSpace(name)
-	if playerName == "" {
-		return PlayerSession{}, ErrInvalidCredentials
-	}
-	player, err := s.playerByName(playerName)
-	if errors.Is(err, sql.ErrNoRows) {
-		return PlayerSession{}, ErrInvalidCredentials
-	}
-	if err != nil {
-		return PlayerSession{}, err
-	}
-	return s.createPlayerSession(player)
-}
-
 func (s *Service) userByEmail(email string) (User, error) {
 	var user User
 	err := s.db.QueryRow(
@@ -190,9 +178,10 @@ func (s *Service) PlayerByToken(token string) (PlayerIdentity, error) {
 	}
 
 	player, err := scanPlayerIdentity(s.db.QueryRow(
-		`SELECT p.id, p.team_id, p.name, p.number, p.positions_json, p.status, p.created_at, p.updated_at
+		`SELECT p.id, p.team_id, p.name, p.number, p.positions_json, p.status, p.created_at, p.updated_at, wm.role, wm.profile_complete, wm.avatar_file_name <> ''
 		 FROM player_sessions s
 		 JOIN players p ON p.id = s.player_id AND p.team_id = s.team_id
+ JOIN wechat_members wm ON wm.player_id = p.id
 		 WHERE s.token = ? AND s.expires_at > ? AND p.status = 'active'`,
 		token,
 		nowISO(),
@@ -207,6 +196,9 @@ func (s *Service) PlayerByToken(token string) (PlayerIdentity, error) {
 }
 
 func (s *Service) Logout(token string) error {
+	if err := s.LogoutPlayer(token); err != nil {
+		return err
+	}
 	_, err := s.db.Exec(`DELETE FROM auth_sessions WHERE token = ?`, strings.TrimSpace(token))
 	return err
 }
@@ -257,18 +249,6 @@ func (s *Service) createPlayerSession(player PlayerIdentity) (PlayerSession, err
 	return PlayerSession{Token: token, Player: player}, nil
 }
 
-func (s *Service) playerByName(name string) (PlayerIdentity, error) {
-	return scanPlayerIdentity(s.db.QueryRow(
-		`SELECT p.id, p.team_id, p.name, p.number, p.positions_json, p.status, p.created_at, p.updated_at
-		 FROM players p
-		 JOIN teams t ON t.id = p.team_id
-		 WHERE p.name = ? AND p.status = 'active'
-		 ORDER BY t.created_at, p.created_at
-		 LIMIT 1`,
-		name,
-	))
-}
-
 type playerIdentityScanner interface {
 	Scan(dest ...any) error
 }
@@ -286,6 +266,9 @@ func scanPlayerIdentity(scanner playerIdentityScanner) (PlayerIdentity, error) {
 		&player.Status,
 		&player.CreatedAt,
 		&player.UpdatedAt,
+		&player.Role,
+		&player.ProfileComplete,
+		&player.HasAvatar,
 	)
 	if err != nil {
 		return PlayerIdentity{}, err

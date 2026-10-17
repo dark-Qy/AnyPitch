@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "活动详情",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "type-badge": "/components/type-badge/index"
+  }
+}

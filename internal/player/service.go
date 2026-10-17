@@ -6,11 +6,10 @@ import (
 	"errors"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 var ErrInvalidPlayer = errors.New("invalid player")
+var ErrPlayerHasHistory = errors.New("player has history")
 
 type Player struct {
 	ID        string   `json:"id"`
@@ -20,12 +19,6 @@ type Player struct {
 	Status    string   `json:"status"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
-}
-
-type CreateInput struct {
-	Name      string   `json:"name"`
-	Number    *int     `json:"number"`
-	Positions []string `json:"positions"`
 }
 
 type UpdateInput struct {
@@ -47,7 +40,7 @@ func (s *Service) List(teamID string) ([]Player, error) {
 	rows, err := s.db.Query(
 		`SELECT id, name, number, positions_json, status, created_at, updated_at
 		 FROM players
-		 WHERE team_id = ?
+		 WHERE team_id = ? AND id IN (SELECT player_id FROM wechat_members)
 		 ORDER BY COALESCE(number, 999), name`,
 		teamID,
 	)
@@ -65,44 +58,6 @@ func (s *Service) List(teamID string) ([]Player, error) {
 		players = append(players, player)
 	}
 	return players, rows.Err()
-}
-
-func (s *Service) Create(teamID string, input CreateInput) (Player, error) {
-	name := strings.TrimSpace(input.Name)
-	if name == "" {
-		return Player{}, ErrInvalidPlayer
-	}
-	positions := cleanPositions(input.Positions)
-	positionsJSON, err := json.Marshal(positions)
-	if err != nil {
-		return Player{}, err
-	}
-	now := nowISO()
-	player := Player{
-		ID:        uuid.NewString(),
-		Name:      name,
-		Number:    input.Number,
-		Positions: positions,
-		Status:    "active",
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	_, err = s.db.Exec(
-		`INSERT INTO players (id, team_id, name, number, positions_json, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		player.ID,
-		teamID,
-		player.Name,
-		player.Number,
-		string(positionsJSON),
-		player.Status,
-		player.CreatedAt,
-		player.UpdatedAt,
-	)
-	if err != nil {
-		return Player{}, err
-	}
-	return player, nil
 }
 
 func (s *Service) Update(teamID, id string, input UpdateInput) (Player, error) {
@@ -148,7 +103,21 @@ func (s *Service) Update(teamID, id string, input UpdateInput) (Player, error) {
 }
 
 func (s *Service) Delete(teamID, id string) error {
-	_, err := s.db.Exec(`DELETE FROM players WHERE id = ? AND team_id = ?`, id, teamID)
+	var references int
+	err := s.db.QueryRow(
+		`SELECT
+		 (SELECT COUNT(*) FROM attendance_records WHERE player_id = ?) +
+		 (SELECT COUNT(*) FROM photos WHERE uploader_player_id = ?) +
+		 (SELECT COUNT(*) FROM tactic_boards WHERE team_id = ? AND instr(slots_json, ?) > 0)`,
+		id, id, teamID, id,
+	).Scan(&references)
+	if err != nil {
+		return err
+	}
+	if references > 0 {
+		return ErrPlayerHasHistory
+	}
+	_, err = s.db.Exec(`DELETE FROM players WHERE id = ? AND team_id = ?`, id, teamID)
 	return err
 }
 

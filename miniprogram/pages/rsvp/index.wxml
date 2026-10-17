@@ -1,0 +1,14 @@
+<view class="page rsvp-page">
+  <team-brand/>
+  <view class="rsvp-heading"><view class="title">活动报名</view><view class="small muted">选择一场活动，确认你的参与状态</view></view>
+  <view wx:if="{{error}}" class="error">{{error}}<button bindtap="load">重试</button></view>
+  <view wx:if="{{loading}}" class="loading">加载中…</view>
+  <view wx:elif="{{!events.length && !error}}" class="quiet-empty">近期暂无可报名活动</view>
+  <view wx:else class="rsvp-list"><view class="rsvp-card" wx:for="{{events}}" wx:key="id" wx:for-item="event">
+    <view class="rsvp-top"><type-badge type="{{event.type}}"/><button class="text-button" data-id="{{event.id}}" bindtap="open">详情 <image src="/assets/icons/chevron-dark.svg"/></button></view>
+    <view class="rsvp-title" data-id="{{event.id}}" bindtap="open">{{event.title}}</view>
+    <view class="rsvp-meta"><image src="/assets/icons/calendar-dark.svg"/><text>{{event.timeText}}</text></view>
+    <view class="rsvp-meta"><image src="/assets/icons/pin-dark.svg"/><text>{{event.location || '地点待定'}}</text></view>
+    <view class="rsvp-choices"><button wx:for="{{statuses}}" wx:key="value" class="{{event.status === item.value ? 'selected' : ''}}" data-id="{{event.id}}" data-status="{{item.value}}" bindtap="rsvp" disabled="{{!!savingID}}">{{item.label}}</button></view>
+  </view></view>
+</view>

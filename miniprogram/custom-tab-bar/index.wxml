@@ -1,0 +1,5 @@
+<view wx:if="{{!hidden}}" class="tab-bar">
+  <block wx:for="{{tabs}}" wx:key="pagePath">
+    <button class="tab-item {{selected === index ? 'selected' : ''}}" data-index="{{index}}" bindtap="switchPage"><image class="tab-icon" src="{{selected === index ? item.activeIcon : item.icon}}"/><text>{{item.text}}</text></button>
+  </block>
+</view>

@@ -15,19 +15,28 @@ import (
 
 	"anypitch/internal/attendance"
 	"anypitch/internal/auth"
+	"anypitch/internal/contentsafety"
 	"anypitch/internal/db"
 	teamevent "anypitch/internal/event"
+	"anypitch/internal/media"
 	"anypitch/internal/player"
+	"anypitch/internal/specialactivity"
+	"anypitch/internal/stats"
 	"anypitch/internal/tactics"
 )
 
 type Handler struct {
-	auth       *auth.Service
-	players    *player.Service
-	events     *teamevent.Service
-	attendance *attendance.Service
-	tactics    *tactics.Service
-	db         *sql.DB
+	auth              *auth.Service
+	players           *player.Service
+	events            *teamevent.Service
+	attendance        *attendance.Service
+	tactics           *tactics.Service
+	stats             *stats.Service
+	specialActivities *specialactivity.Service
+	media             *media.Service
+	db                *sql.DB
+	safety            *contentsafety.Client
+	reviewDir         string
 }
 
 func NewHandler(conn *sql.DB) (http.Handler, error) {
@@ -35,13 +44,29 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 		return nil, err
 	}
 	authService := auth.NewService(conn)
+	uploadDir := os.Getenv("ANYPITCH_UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = filepath.Join("data", "uploads")
+	}
+	mediaService, err := media.NewService(conn, uploadDir)
+	if err != nil {
+		return nil, err
+	}
+	reviewDir := filepath.Join(uploadDir, "pending")
+	if err := os.MkdirAll(reviewDir, 0700); err != nil {
+		return nil, err
+	}
 	handler := &Handler{
-		auth:       authService,
-		players:    player.NewService(conn),
-		events:     teamevent.NewService(conn),
-		attendance: attendance.NewService(conn),
-		tactics:    tactics.NewService(conn),
-		db:         conn,
+		safety: contentsafety.New(), reviewDir: reviewDir,
+		auth:              authService,
+		players:           player.NewService(conn),
+		events:            teamevent.NewService(conn),
+		attendance:        attendance.NewService(conn),
+		tactics:           tactics.NewService(conn),
+		stats:             stats.NewService(conn),
+		specialActivities: specialactivity.NewService(conn),
+		media:             mediaService,
+		db:                conn,
 	}
 	defaultCoach, err := handler.auth.EnsureDefaultCoach()
 	if err != nil {
@@ -56,7 +81,15 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	mux.HandleFunc("/api/auth/login", handler.login)
 	mux.Handle("/api/auth/logout", handler.withAuth(handler.logout))
 	mux.Handle("/api/auth/me", handler.withAuth(handler.me))
-	mux.HandleFunc("/api/player/login", handler.playerLogin)
+	mux.HandleFunc("/api/auth/wechat", handler.wechatLogin)
+	mux.HandleFunc("/api/wechat/content-callback", handler.safetyCallback)
+	mux.HandleFunc("/api/wechat/review-media/", handler.reviewMedia)
+	mux.Handle("/api/player/reviews/", handler.withPlayer(handler.playerReviews))
+	mux.Handle("/api/player/profile", handler.withPlayer(handler.playerProfile))
+	mux.Handle("/api/player/avatar", handler.withPlayer(handler.playerAvatarUpload))
+	mux.Handle("/api/player/avatars/", handler.withPlayer(handler.playerAvatarImage))
+	mux.Handle("/api/coach/members", handler.withAuth(handler.coachMembers))
+	mux.Handle("/api/coach/members/", handler.withAuth(handler.coachMemberDetail))
 	mux.Handle("/api/player/logout", handler.withPlayer(handler.playerLogout))
 	mux.Handle("/api/player/me", handler.withPlayer(handler.playerMe))
 	mux.Handle("/api/player/events", handler.withPlayer(handler.playerEventsCollection))
@@ -67,6 +100,24 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	mux.Handle("/api/locations/", handler.withAuth(handler.locationDetail))
 	mux.Handle("/api/events", handler.withAuth(handler.eventsCollection))
 	mux.Handle("/api/events/", handler.withAuth(handler.eventNested))
+	mux.Handle("/api/terms", handler.withAuth(handler.termsCollection))
+	mux.Handle("/api/terms/", handler.withAuth(handler.termDetail))
+	mux.Handle("/api/stats/leaderboard", handler.withAuth(handler.coachLeaderboard))
+	mux.Handle("/api/stats/history", handler.withAuth(handler.coachHistory))
+	mux.Handle("/api/stats/history.csv", handler.withAuth(handler.coachHistoryCSV))
+	mux.Handle("/api/special-activities", handler.withAuth(handler.specialActivitiesCollection))
+	mux.Handle("/api/special-activities/", handler.withAuth(handler.specialActivityNested))
+	mux.Handle("/api/albums", handler.withAuth(handler.coachAlbumsCollection))
+	mux.Handle("/api/albums/", handler.withAuth(handler.coachAlbumNested))
+	mux.Handle("/api/photos/", handler.withAuth(handler.coachPhotoDetail))
+	mux.Handle("/api/player/stats/leaderboard", handler.withPlayer(handler.playerLeaderboard))
+	mux.Handle("/api/player/stats/me", handler.withPlayer(handler.playerStatsMe))
+	mux.Handle("/api/player/terms", handler.withPlayer(handler.playerTerms))
+	mux.Handle("/api/player/special-activities", handler.withPlayer(handler.playerSpecialActivities))
+	mux.Handle("/api/player/special-activities/", handler.withPlayer(handler.playerSpecialActivityNested))
+	mux.Handle("/api/player/albums", handler.withPlayer(handler.playerAlbumsCollection))
+	mux.Handle("/api/player/albums/", handler.withPlayer(handler.playerAlbumNested))
+	mux.Handle("/api/player/photos/", handler.withPlayer(handler.playerPhotoDetail))
 	mux.Handle("/api/tactics/templates", handler.withAuth(handler.tacticsTemplates))
 	mux.Handle("/api/tactics/boards", handler.withAuth(handler.tacticsBoardsCollection))
 	mux.Handle("/api/tactics/boards/", handler.withAuth(handler.tacticsBoardDetail))
@@ -74,6 +125,12 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 		writeError(w, http.StatusNotFound, "not_found", "API route not found.")
 	})
 	if frontend, ok := resolveFrontend(); ok {
+		mux.HandleFunc("/assets/miniprogram/fonts/source-han-serif-medium.woff", func(w http.ResponseWriter, r *http.Request) {
+			// Only public typography assets opt into cross-origin font loading.
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Content-Type", "font/woff")
+			frontend.fileServer.ServeHTTP(w, r)
+		})
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if shouldServeSPA(r.URL.Path) {
 				http.ServeFile(w, r, frontend.indexPath)
@@ -148,25 +205,6 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	writeSuccess(w, session)
 }
 
-func (h *Handler) playerLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
-		return
-	}
-	var input struct {
-		Name string `json:"name"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	session, err := h.auth.LoginPlayerByName(input.Name)
-	if err != nil {
-		handleAuthError(w, err)
-		return
-	}
-	writeSuccess(w, session)
-}
-
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request, ctx requestContext) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
@@ -216,17 +254,7 @@ func (h *Handler) playersCollection(w http.ResponseWriter, r *http.Request, ctx 
 			return
 		}
 		writeSuccess(w, map[string]any{"players": players})
-	case http.MethodPost:
-		var input player.CreateInput
-		if !decodeJSON(w, r, &input) {
-			return
-		}
-		created, err := h.players.Create(ctx.teamID, input)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_player", "Player name is required.")
-			return
-		}
-		writeSuccess(w, map[string]any{"player": created})
+
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 	}
@@ -244,6 +272,9 @@ func (h *Handler) playerDetail(w http.ResponseWriter, r *http.Request, ctx reque
 		if !decodeJSON(w, r, &input) {
 			return
 		}
+		if !h.checkText(w, r, 3, input) {
+			return
+		}
 		updated, err := h.players.Update(ctx.teamID, id, input)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_player", "Player update is invalid.")
@@ -252,6 +283,10 @@ func (h *Handler) playerDetail(w http.ResponseWriter, r *http.Request, ctx reque
 		writeSuccess(w, map[string]any{"player": updated})
 	case http.MethodDelete:
 		if err := h.players.Delete(ctx.teamID, id); err != nil {
+			if errors.Is(err, player.ErrPlayerHasHistory) {
+				writeError(w, http.StatusConflict, "player_has_history", "This player has records. Mark them inactive instead.")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to delete player.")
 			return
 		}
@@ -273,6 +308,9 @@ func (h *Handler) eventsCollection(w http.ResponseWriter, r *http.Request, ctx r
 	case http.MethodPost:
 		var input teamevent.CreateInput
 		if !decodeJSON(w, r, &input) {
+			return
+		}
+		if !h.checkText(w, r, 3, input) {
 			return
 		}
 		created, err := h.events.Create(ctx.teamID, input)
@@ -298,6 +336,9 @@ func (h *Handler) locationsCollection(w http.ResponseWriter, r *http.Request, ct
 	case http.MethodPost:
 		var input teamevent.LocationInput
 		if !decodeJSON(w, r, &input) {
+			return
+		}
+		if !h.checkText(w, r, 3, input) {
 			return
 		}
 		location, err := h.events.CreateLocation(ctx.teamID, input)
@@ -340,6 +381,15 @@ func (h *Handler) eventNested(w http.ResponseWriter, r *http.Request, ctx reques
 		h.eventAttendance(w, r, ctx, parts[0])
 		return
 	}
+
+	if len(parts) == 2 && parts[1] == "cancel" {
+		h.eventCancel(w, r, ctx, parts[0])
+		return
+	}
+	if len(parts) == 2 && parts[1] == "restore" {
+		h.eventRestore(w, r, ctx, parts[0])
+		return
+	}
 	writeError(w, http.StatusNotFound, "not_found", "Event route not found.")
 }
 
@@ -350,6 +400,9 @@ func (h *Handler) eventDetail(w http.ResponseWriter, r *http.Request, ctx reques
 		if !decodeJSON(w, r, &input) {
 			return
 		}
+		if !h.checkText(w, r, 3, input) {
+			return
+		}
 		updated, err := h.events.Update(ctx.teamID, id, input)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_event", "Event update is invalid.")
@@ -358,6 +411,10 @@ func (h *Handler) eventDetail(w http.ResponseWriter, r *http.Request, ctx reques
 		writeSuccess(w, map[string]any{"event": updated})
 	case http.MethodDelete:
 		if err := h.events.Delete(ctx.teamID, id); err != nil {
+			if errors.Is(err, teamevent.ErrEventHasHistory) {
+				writeError(w, http.StatusConflict, "event_has_history", "This event has records. Cancel it instead.")
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to delete event.")
 			return
 		}
@@ -377,11 +434,14 @@ func (h *Handler) eventAttendance(w http.ResponseWriter, r *http.Request, ctx re
 		}
 		writeSuccess(w, map[string]any{"records": records})
 	case http.MethodPut:
-		var input attendance.ReplaceInput
+		var input attendance.UpdateInput
 		if !decodeJSON(w, r, &input) {
 			return
 		}
-		records, err := h.attendance.Replace(ctx.teamID, eventID, input)
+		if !h.checkText(w, r, 3, input) {
+			return
+		}
+		records, err := h.attendance.Update(ctx.teamID, eventID, input)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_attendance", "Attendance records are invalid.")
 			return
@@ -393,6 +453,10 @@ func (h *Handler) eventAttendance(w http.ResponseWriter, r *http.Request, ctx re
 }
 
 func (h *Handler) playerEventsCollection(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {
+	if r.Method == http.MethodPost {
+		writeError(w, http.StatusForbidden, "forbidden", "活动由网页管理端发布")
+		return
+	}
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 		return
@@ -413,11 +477,61 @@ func (h *Handler) playerEventsCollection(w http.ResponseWriter, r *http.Request,
 func (h *Handler) playerEventNested(w http.ResponseWriter, r *http.Request, ctx playerRequestContext) {
 	clean := path.Clean(strings.TrimPrefix(r.URL.Path, "/api/player/events/"))
 	parts := strings.Split(clean, "/")
+	if len(parts) == 1 {
+		h.playerEventDetail(w, r, ctx, parts[0])
+		return
+	}
 	if len(parts) == 2 && parts[1] == "attendance" {
 		h.playerEventAttendance(w, r, ctx, parts[0])
 		return
 	}
 	writeError(w, http.StatusNotFound, "not_found", "Player event route not found.")
+}
+
+func (h *Handler) playerEventDetail(w http.ResponseWriter, r *http.Request, ctx playerRequestContext, eventID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		return
+	}
+	event, err := h.events.Get(ctx.teamID, eventID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "Event not found.")
+		return
+	}
+	record, err := h.attendance.GetForPlayer(ctx.teamID, eventID, ctx.player.ID)
+	if err != nil && !errors.Is(err, attendance.ErrEventCancelled) {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to load attendance.")
+		return
+	}
+	if errors.Is(err, attendance.ErrEventCancelled) {
+		record = attendance.Record{PlayerID: ctx.player.ID, Status: "unknown"}
+	}
+	members, err := h.attendance.ListMembers(ctx.teamID, eventID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to load attendance.")
+		return
+	}
+	albums, err := h.media.ListAlbums(ctx.teamID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "Failed to load album.")
+		return
+	}
+	var album *media.Album
+	photos := []media.Photo{}
+	for i := range albums {
+		if albums[i].EventID != eventID {
+			continue
+		}
+		copy := albums[i]
+		album = &copy
+		photos, err = h.media.ListPhotos(ctx.teamID, copy.ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to load album photos.")
+			return
+		}
+		break
+	}
+	writeSuccess(w, map[string]any{"event": event, "record": record, "members": members, "album": album, "photos": photos})
 }
 
 func (h *Handler) playerEventAttendance(w http.ResponseWriter, r *http.Request, ctx playerRequestContext, eventID string) {
@@ -435,14 +549,25 @@ func (h *Handler) playerEventAttendance(w http.ResponseWriter, r *http.Request, 
 		}
 		writeSuccess(w, map[string]any{"record": record, "summary": summary})
 	case http.MethodPut:
+		if !ctx.player.ProfileComplete {
+			writeError(w, http.StatusForbidden, "profile_incomplete", "请先完善昵称再报名")
+			return
+		}
 		var input struct {
 			Status string `json:"status"`
 		}
 		if !decodeJSON(w, r, &input) {
 			return
 		}
+		if !h.checkText(w, r, 3, input) {
+			return
+		}
 		record, err := h.attendance.SaveForPlayer(ctx.teamID, eventID, ctx.player.ID, input.Status)
 		if err != nil {
+			if errors.Is(err, attendance.ErrEventCancelled) {
+				writeError(w, 409, "event_cancelled", "活动已取消，不能报名")
+				return
+			}
 			writeError(w, http.StatusBadRequest, "invalid_attendance", "Attendance status is invalid.")
 			return
 		}
@@ -479,6 +604,9 @@ func (h *Handler) tacticsBoardsCollection(w http.ResponseWriter, r *http.Request
 		if !decodeJSON(w, r, &input) {
 			return
 		}
+		if !h.checkText(w, r, 3, input) {
+			return
+		}
 		board, err := h.tactics.Create(ctx.teamID, input)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_tactic_board", "Tactic board is invalid.")
@@ -496,6 +624,9 @@ func (h *Handler) tacticsBoardDetail(w http.ResponseWriter, r *http.Request, ctx
 	case http.MethodPatch:
 		var input tactics.BoardInput
 		if !decodeJSON(w, r, &input) {
+			return
+		}
+		if !h.checkText(w, r, 3, input) {
 			return
 		}
 		board, err := h.tactics.Update(ctx.teamID, id, input)
@@ -530,7 +661,7 @@ type playerRequestContext struct {
 func (h *Handler) withAuth(next func(http.ResponseWriter, *http.Request, requestContext)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
-		user, err := h.auth.UserByToken(token)
+		user, err := h.auth.CoachByToken(token)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
 			return
@@ -621,6 +752,8 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
 
 func handleAuthError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, auth.ErrUnauthorized):
+		writeError(w, 401, "unauthorized", "账号已停用或登录已失效")
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		writeError(w, http.StatusBadRequest, "invalid_credentials", "Password is invalid.")
 	default:

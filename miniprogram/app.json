@@ -1,0 +1,46 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/events/index",
+    "pages/event-detail/index",
+    "pages/rsvp/index",
+    "pages/stats/index",
+    "pages/mine/index",
+    "pages/topics/index",
+    "pages/settings/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "吸土城FC",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#ffffff",
+    "enablePullDownRefresh": true
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#526578",
+    "selectedColor": "#23569a",
+    "backgroundColor": "#ffffff",
+    "list": [
+      {
+        "pagePath": "pages/events/index",
+        "text": "活动"
+      },
+      {
+        "pagePath": "pages/rsvp/index",
+        "text": "报名"
+      },
+      {
+        "pagePath": "pages/stats/index",
+        "text": "训练榜"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "sitemap.json"
+}

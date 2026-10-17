@@ -1,0 +1,1 @@
+.login{min-height:85vh;padding-top:100rpx}.login-action{margin-top:70rpx;padding-top:30rpx;border-top:1rpx solid var(--line)}.form-heading{font-family:var(--title-font);font-size:38rpx;font-weight:500;margin:0 0 32rpx}.login button.primary{min-height:max(100rpx,44px);font-size:30rpx}

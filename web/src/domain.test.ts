@@ -19,14 +19,15 @@ import {
   templatesForFormat,
   normalizeSlotPosition,
   toLocalDateTimeInput,
+  twoHoursAfter,
 } from "./domain";
 
 describe("attendanceSummary", () => {
   it("summarizes available and unavailable player counts", () => {
     const summary = attendanceSummary([
       { player_id: "p1", status: "available", note: "", updated_at: "" },
-      { player_id: "p2", status: "late", note: "", updated_at: "" },
-      { player_id: "p3", status: "injured", note: "", updated_at: "" },
+      { player_id: "p2", status: "available", note: "", updated_at: "" },
+      { player_id: "p3", status: "unavailable", note: "", updated_at: "" },
     ]);
 
     expect(summary.ready).toBe(2);
@@ -68,10 +69,10 @@ describe("buildAttendanceStatusMap", () => {
         { id: "p1", name: "林海" },
         { id: "p2", name: "周舟" },
       ],
-      [{ player_id: "p2", status: "late", note: "", updated_at: "" }],
+      [{ player_id: "p2", status: "tentative", note: "", updated_at: "" }],
     );
 
-    expect(records).toEqual({ p1: "unknown", p2: "late" });
+    expect(records).toEqual({ p1: "unknown", p2: "tentative" });
   });
 
   it("ignores saved records for players outside the current attendance roster", () => {
@@ -79,7 +80,7 @@ describe("buildAttendanceStatusMap", () => {
       [{ id: "p1", name: "林海" }],
       [
         { player_id: "p1", status: "available", note: "", updated_at: "" },
-        { player_id: "p2", status: "late", note: "", updated_at: "" },
+        { player_id: "p2", status: "tentative", note: "", updated_at: "" },
       ],
     );
 
@@ -228,5 +229,16 @@ describe("tactic helpers", () => {
   it("selects a realistic vertical pitch ratio", () => {
     expect(pitchGeometry(5)).toEqual({ ratio: "68 / 105", maxWidth: "560px" });
     expect(pitchGeometry(11)).toEqual({ ratio: "68 / 105", maxWidth: "620px" });
+  });
+});
+
+describe("activity end time", () => {
+  it("defaults to two hours later, including crossing the year boundary", () => {
+    expect(twoHoursAfter("2026-09-16T19:30")).toBe("2026-09-16T21:30");
+    expect(twoHoursAfter("2026-12-31T23:30")).toBe("2027-01-01T01:30");
+  });
+  it("clears the end suggestion when the start is empty or incomplete", () => {
+    expect(twoHoursAfter("")).toBe("");
+    expect(twoHoursAfter("invalid")).toBe("");
   });
 });

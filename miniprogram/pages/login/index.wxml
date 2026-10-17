@@ -1,0 +1,1 @@
+<view class="page login"><team-brand/><view class="login-action"><view class="form-heading">回到球队</view><button class="primary icon-action" bindtap="submit" loading="{{busy}}" disabled="{{busy}}">微信登录<image src="/assets/icons/chevron-light.svg"/></button><view wx:if="{{error}}" class="error">{{error}}</view></view></view>

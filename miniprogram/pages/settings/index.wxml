@@ -1,0 +1,8 @@
+<view class="page settings-page"><view class="title">设置</view>
+  <view class="menu-group">
+    <button class="menu-item version-entry" bindtap="versionTap"><text class="grow">版本</text><text class="setting-value">{{version}}</text></button>
+  </view>
+  <view wx:if="{{error}}" class="error">{{error}}</view>
+  <view wx:if="{{diagnostics}}" class="diagnostics"><view class="small muted">成员编号</view><text selectable="{{true}}">{{player.id}}</text><view class="small muted">身份：{{player.role === 'owner' ? '负责人' : player.role === 'coach' ? '教练' : '队员'}}</view></view>
+  <button class="logout-button" bindtap="logout" disabled="{{saving}}">退出登录</button>
+</view>

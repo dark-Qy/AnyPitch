@@ -2,12 +2,7 @@ export type AttendanceStatus =
   | "unknown"
   | "available"
   | "unavailable"
-  | "tentative"
-  | "late"
-  | "injured"
-  | "present"
-  | "absent"
-  | "excused";
+  | "tentative";
 
 export type AttendanceRecord = {
   player_id: string;
@@ -121,13 +116,8 @@ export function splitEventsByTime<T extends { starts_at: string; ends_at: string
 export function calendarEventStatusClass(status: AttendanceStatus): string {
   switch (status) {
     case "available":
-    case "late":
-    case "present":
       return "status-available";
     case "unavailable":
-    case "injured":
-    case "absent":
-    case "excused":
       return "status-unavailable";
     case "tentative":
       return "status-tentative";
@@ -139,14 +129,9 @@ export function calendarEventStatusClass(status: AttendanceStatus): string {
 export function calendarEventStatusLabel(status: AttendanceStatus): string {
   switch (status) {
     case "available":
-    case "late":
-    case "present":
       return "参加";
     case "unavailable":
-    case "injured":
-    case "absent":
-    case "excused":
-      return "拒绝";
+      return "不参加";
     case "tentative":
       return "待定";
     default:
@@ -161,10 +146,10 @@ export function eventTimeRange<T extends { starts_at: string; ends_at: string }>
 export function attendanceSummary(records: AttendanceRecord[]) {
   return records.reduce(
     (summary, record) => {
-      if (record.status === "available" || record.status === "late" || record.status === "present") {
+      if (record.status === "available") {
         summary.ready += 1;
       }
-      if (record.status === "unavailable" || record.status === "injured" || record.status === "absent") {
+      if (record.status === "unavailable") {
         summary.blocked += 1;
       }
       return summary;
@@ -181,9 +166,9 @@ export function attendanceDecisionSummary(records: AttendanceRecord[], totalPlay
     unknown: 0,
   };
   for (const record of records) {
-    if (record.status === "available" || record.status === "late" || record.status === "present") {
+    if (record.status === "available") {
       summary.available += 1;
-    } else if (record.status === "unavailable" || record.status === "injured" || record.status === "absent" || record.status === "excused") {
+    } else if (record.status === "unavailable") {
       summary.unavailable += 1;
     } else if (record.status === "tentative") {
       summary.tentative += 1;
@@ -312,4 +297,12 @@ function clamp(value: number) {
 function formatLocalTime(value: string): string {
   const date = new Date(value);
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+export function twoHoursAfter(value: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  date.setHours(date.getHours() + 2);
+  return toLocalDateTimeInput(date);
 }

@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "",
+  "usingComponents": {
+    "team-brand": "/components/brand/index",
+    "type-badge": "/components/type-badge/index"
+  }
+}

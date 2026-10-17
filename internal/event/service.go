@@ -11,24 +11,28 @@ import (
 
 var ErrInvalidEvent = errors.New("invalid event")
 var ErrInvalidLocation = errors.New("invalid event location")
+var ErrEventHasHistory = errors.New("event has history")
 
 const DefaultLocationName = "北京邮电大学（海淀校区）"
 
 type Event struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Title     string `json:"title"`
-	StartsAt  string `json:"starts_at"`
-	EndsAt    string `json:"ends_at"`
-	Location  string `json:"location"`
-	Opponent  string `json:"opponent"`
-	Notes     string `json:"notes"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	Format      int    `json:"format"`
+	Title       string `json:"title"`
+	StartsAt    string `json:"starts_at"`
+	EndsAt      string `json:"ends_at"`
+	Location    string `json:"location"`
+	Opponent    string `json:"opponent"`
+	Notes       string `json:"notes"`
+	CancelledAt string `json:"cancelled_at,omitempty"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
 }
 
 type CreateInput struct {
 	Type     string `json:"type"`
+	Format   int    `json:"format"`
 	Title    string `json:"title"`
 	StartsAt string `json:"starts_at"`
 	EndsAt   string `json:"ends_at"`
@@ -39,6 +43,7 @@ type CreateInput struct {
 
 type UpdateInput struct {
 	Type     *string `json:"type"`
+	Format   *int    `json:"format"`
 	Title    *string `json:"title"`
 	StartsAt *string `json:"starts_at"`
 	EndsAt   *string `json:"ends_at"`
@@ -68,9 +73,11 @@ func NewService(db *sql.DB) *Service {
 
 func (s *Service) List(teamID string) ([]Event, error) {
 	rows, err := s.db.Query(
-		`SELECT id, type, title, starts_at, ends_at, location, opponent, notes, created_at, updated_at
-		 FROM events
-		 WHERE team_id = ?
+		`SELECT e.id, e.type, e.title, e.starts_at, e.ends_at, e.location, e.opponent, e.notes, e.created_at, e.updated_at,
+		 COALESCE(c.cancelled_at, ''), e.format
+		 FROM events e
+		 LEFT JOIN event_cancellations c ON c.event_id = e.id
+		 WHERE e.team_id = ?
 		 ORDER BY starts_at`,
 		teamID,
 	)
@@ -100,8 +107,8 @@ func (s *Service) Create(teamID string, input CreateInput) (Event, error) {
 	event.CreatedAt = now
 	event.UpdatedAt = now
 	_, err = s.db.Exec(
-		`INSERT INTO events (id, team_id, type, title, starts_at, ends_at, location, opponent, notes, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO events (id, team_id, type, title, starts_at, ends_at, location, opponent, notes, created_at, updated_at, format)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		event.ID,
 		teamID,
 		event.Type,
@@ -113,6 +120,7 @@ func (s *Service) Create(teamID string, input CreateInput) (Event, error) {
 		event.Notes,
 		event.CreatedAt,
 		event.UpdatedAt,
+		event.Format,
 	)
 	if err != nil {
 		return Event{}, err
@@ -127,6 +135,9 @@ func (s *Service) Update(teamID, id string, input UpdateInput) (Event, error) {
 	}
 	if input.Type != nil {
 		current.Type = strings.TrimSpace(*input.Type)
+	}
+	if input.Format != nil {
+		current.Format = *input.Format
 	}
 	if input.Title != nil {
 		current.Title = strings.TrimSpace(*input.Title)
@@ -152,7 +163,7 @@ func (s *Service) Update(teamID, id string, input UpdateInput) (Event, error) {
 	}
 	current.UpdatedAt = nowISO()
 	_, err = s.db.Exec(
-		`UPDATE events SET type = ?, title = ?, starts_at = ?, ends_at = ?, location = ?, opponent = ?, notes = ?, updated_at = ?
+		`UPDATE events SET type = ?, title = ?, starts_at = ?, ends_at = ?, location = ?, opponent = ?, notes = ?, updated_at = ?, format = ?
 		 WHERE id = ? AND team_id = ?`,
 		current.Type,
 		current.Title,
@@ -162,6 +173,7 @@ func (s *Service) Update(teamID, id string, input UpdateInput) (Event, error) {
 		current.Opponent,
 		current.Notes,
 		current.UpdatedAt,
+		current.Format,
 		id,
 		teamID,
 	)
@@ -172,15 +184,54 @@ func (s *Service) Update(teamID, id string, input UpdateInput) (Event, error) {
 }
 
 func (s *Service) Delete(teamID, id string) error {
-	_, err := s.db.Exec(`DELETE FROM events WHERE id = ? AND team_id = ?`, id, teamID)
+	var references int
+	err := s.db.QueryRow(
+		`SELECT
+		 (SELECT COUNT(*) FROM attendance_records WHERE event_id = ?) +
+		 (SELECT COUNT(*) FROM albums WHERE event_id = ?)`,
+		id, id,
+	).Scan(&references)
+	if err != nil {
+		return err
+	}
+	if references > 0 {
+		return ErrEventHasHistory
+	}
+	_, err = s.db.Exec(`DELETE FROM events WHERE id = ? AND team_id = ?`, id, teamID)
 	return err
+}
+
+func (s *Service) Cancel(teamID, id string) (Event, error) {
+	event, err := s.Get(teamID, id)
+	if err != nil {
+		return Event{}, err
+	}
+	if event.CancelledAt != "" {
+		return event, nil
+	}
+	if _, err := s.db.Exec(`INSERT INTO event_cancellations (event_id, cancelled_at) VALUES (?, ?)`, id, nowISO()); err != nil {
+		return Event{}, err
+	}
+	return s.Get(teamID, id)
+}
+
+func (s *Service) Restore(teamID, id string) (Event, error) {
+	if _, err := s.Get(teamID, id); err != nil {
+		return Event{}, err
+	}
+	if _, err := s.db.Exec(`DELETE FROM event_cancellations WHERE event_id = ?`, id); err != nil {
+		return Event{}, err
+	}
+	return s.Get(teamID, id)
 }
 
 func (s *Service) Get(teamID, id string) (Event, error) {
 	row := s.db.QueryRow(
-		`SELECT id, type, title, starts_at, ends_at, location, opponent, notes, created_at, updated_at
-		 FROM events
-		 WHERE id = ? AND team_id = ?`,
+		`SELECT e.id, e.type, e.title, e.starts_at, e.ends_at, e.location, e.opponent, e.notes, e.created_at, e.updated_at,
+		 COALESCE(c.cancelled_at, ''), e.format
+		 FROM events e
+		 LEFT JOIN event_cancellations c ON c.event_id = e.id
+		 WHERE e.id = ? AND e.team_id = ?`,
 		id,
 		teamID,
 	)
@@ -204,6 +255,8 @@ func scanEvent(scanner eventScanner) (Event, error) {
 		&event.Notes,
 		&event.CreatedAt,
 		&event.UpdatedAt,
+		&event.CancelledAt,
+		&event.Format,
 	)
 	if err != nil {
 		return Event{}, err
@@ -218,6 +271,7 @@ func scanEvent(scanner eventScanner) (Event, error) {
 func normalizeCreate(input CreateInput) (Event, error) {
 	event := Event{
 		Type:     strings.TrimSpace(input.Type),
+		Format:   input.Format,
 		Title:    strings.TrimSpace(input.Title),
 		StartsAt: strings.TrimSpace(input.StartsAt),
 		EndsAt:   strings.TrimSpace(input.EndsAt),
@@ -236,7 +290,13 @@ func normalizeEvent(event Event) (Event, error) {
 	event.Location = strings.TrimSpace(event.Location)
 	event.Opponent = strings.TrimSpace(event.Opponent)
 	event.Notes = strings.TrimSpace(event.Notes)
-	if event.Type != "training" && event.Type != "friendly" {
+	if event.Type != "training" && event.Type != "friendly" && event.Type != "pickup" {
+		return Event{}, ErrInvalidEvent
+	}
+	if event.Type != "friendly" {
+		event.Format = 0
+	}
+	if event.Format != 0 && event.Format != 5 && event.Format != 7 && event.Format != 8 && event.Format != 11 {
 		return Event{}, ErrInvalidEvent
 	}
 	if event.Title == "" || event.StartsAt == "" {
