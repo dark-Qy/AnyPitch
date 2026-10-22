@@ -88,6 +88,7 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	mux.Handle("/api/player/profile", handler.withPlayer(handler.playerProfile))
 	mux.Handle("/api/player/avatar", handler.withPlayer(handler.playerAvatarUpload))
 	mux.Handle("/api/player/avatars/", handler.withPlayer(handler.playerAvatarImage))
+	mux.Handle("/api/player/members/", handler.withPlayer(handler.playerMemberProfile))
 	mux.Handle("/api/coach/members", handler.withAuth(handler.coachMembers))
 	mux.Handle("/api/coach/members/", handler.withAuth(handler.coachMemberDetail))
 	mux.Handle("/api/player/logout", handler.withPlayer(handler.playerLogout))

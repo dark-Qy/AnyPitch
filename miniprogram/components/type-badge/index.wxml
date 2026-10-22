@@ -1,1 +1,1 @@
-<view class="badge {{design.tone}}"><image src="{{design.icon}}" mode="aspectFit"/><text>{{design.label}}</text></view>
+<view class="badge {{design.tone}}"><image wx:if="{{!hideIcon}}" src="{{design.icon}}" mode="aspectFit"/><text>{{design.label}}</text></view>

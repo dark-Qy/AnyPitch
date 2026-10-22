@@ -1,0 +1,12 @@
+<view class="page member-page">
+  <view wx:if="{{error}}" class="error">{{error}}<button bindtap="load">重试</button></view>
+  <view wx:elif="{{loading && !member}}" class="loading">加载中…</view>
+  <view wx:elif="{{member}}" class="member-profile">
+    <button class="portrait" bindtap="previewAvatar" disabled="{{!avatarPath}}" aria-label="{{avatarPath ? '查看头像大图' : '暂无头像'}}"><image wx:if="{{avatarPath}}" src="{{avatarPath}}" mode="aspectFill"/><text wx:else>{{member.initial}}</text></button>
+    <view class="member-name">{{member.name}}</view>
+    <view class="member-caption">西土城 FC 队员</view>
+    <view class="member-divider"/>
+    <view class="member-stat"><text>训练与友谊赛参加报名</text><view><text class="member-count">{{member.participation_count}}</text><text>次</text></view></view>
+    <view class="member-note">次数根据当前报名状态计算，已取消活动不计入。</view>
+  </view>
+</view>

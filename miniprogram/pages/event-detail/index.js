@@ -62,6 +62,7 @@ Page({
     getApp().globalData.postProfileRoute = '/pages/event-detail/index?id=' + encodeURIComponent(this.id);
     wx.switchTab({ url: '/pages/mine/index' });
   },
+  openMember(e) { wx.navigateTo({ url: '/pages/member/index?id=' + encodeURIComponent(e.currentTarget.dataset.id) }); },
   onShareAppMessage() {
     const event = this.data.event;
     return { title: event ? `${event.title}｜${view.dateText(event.starts_at)}` : '吸土城FC活动', path: share.eventPath(this.id), imageUrl: this.data.shareImagePath || share.eventBaseImage };

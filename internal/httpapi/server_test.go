@@ -280,6 +280,37 @@ func TestWeChatMemberOnlyManagesOwnAttendance(t *testing.T) {
 	assertStatus(t, forbidden, http.StatusUnauthorized)
 }
 
+func TestMemberProfileIsTeamScopedAndUsesTrainingLeaderboardCount(t *testing.T) {
+	h := newTestHandler(t)
+	first := createFixturePlayer(t, h, map[string]any{"name": "小王"})
+	second := createFixturePlayer(t, h, map[string]any{"name": "小李"})
+	firstID := jsonPath(t, first, "data.player.id").(string)
+	secondID := jsonPath(t, second, "data.player.id").(string)
+	memberLogin := performJSONRequest(t, h, http.MethodPost, "/api/auth/wechat", "", map[string]any{"code": firstID})
+	memberToken := jsonPath(t, memberLogin, "data.token").(string)
+	coachLogin := performJSONRequest(t, h, http.MethodPost, "/api/auth/login", "", map[string]any{"password": "AnyPitch@2026"})
+	coachToken := jsonPath(t, coachLogin, "data.token").(string)
+	for _, eventType := range []string{"training", "friendly", "pickup"} {
+		event := performJSONRequest(t, h, http.MethodPost, "/api/events", coachToken, map[string]any{"type": eventType, "title": "队内活动", "starts_at": "2026-10-22T19:00:00+08:00"})
+		assertStatus(t, event, http.StatusOK)
+		id := jsonPath(t, event, "data.event.id").(string)
+		assertStatus(t, performJSONRequest(t, h, http.MethodPut, "/api/events/"+id+"/attendance", coachToken, map[string]any{"records": []map[string]any{{"player_id": secondID, "status": "available"}}}), http.StatusOK)
+	}
+	profile := performJSONRequest(t, h, http.MethodGet, "/api/player/members/"+secondID, memberToken, nil)
+	assertStatus(t, profile, http.StatusOK)
+	assertJSONEquals(t, profile, "data.member.name", "小李")
+	assertJSONEquals(t, profile, "data.member.participation_count", float64(2))
+	if _, err := h.(*fixtureHandler).db.Exec(`INSERT INTO players (id,team_id,name,positions_json,status,created_at,updated_at) SELECT 'legacy-member',team_id,'老队员','[]','active',created_at,updated_at FROM players WHERE id=?`, firstID); err != nil {
+		t.Fatal(err)
+	}
+	legacy := performJSONRequest(t, h, http.MethodGet, "/api/player/members/legacy-member", memberToken, nil)
+	assertStatus(t, legacy, http.StatusOK)
+	assertJSONEquals(t, legacy, "data.member.name", "老队员")
+	assertJSONEquals(t, legacy, "data.member.has_avatar", false)
+	assertStatus(t, performJSONRequest(t, h, http.MethodGet, "/api/player/members/"+secondID, "", nil), http.StatusUnauthorized)
+	assertStatus(t, performJSONRequest(t, h, http.MethodGet, "/api/player/members/missing", memberToken, nil), http.StatusNotFound)
+}
+
 func TestPersonalHistoryUsesCurrentDatabaseStatusAndCoachCanEditPastEvents(t *testing.T) {
 	h := newTestHandler(t)
 	coach := performJSONRequest(t, h, http.MethodPost, "/api/auth/login", "", map[string]any{"password": "AnyPitch@2026"})

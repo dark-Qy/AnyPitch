@@ -119,6 +119,7 @@ Page({
   settings() { wx.navigateTo({ url: '/pages/settings/index' }); },
   topics() { wx.navigateTo({ url: '/pages/topics/index' }); },
   events() { wx.switchTab({ url: '/pages/events/index' }); },
+  member() { if (this.data.player.id) wx.navigateTo({ url: '/pages/member/index?id=' + encodeURIComponent(this.data.player.id) }); },
   open(e) { wx.navigateTo({ url: '/pages/event-detail/index?id=' + encodeURIComponent(e.currentTarget.dataset.id) }); },
   onShareAppMessage() { return { title: '邀请你加入吸土城FC', path: '/pages/login/index', imageUrl: share.teamImage }; },
   onPullDownRefresh() { this.load(); }

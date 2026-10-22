@@ -1,6 +1,6 @@
 <view class="page mine-page"><team-brand/>
   <view class="profile-hero">
-    <view class="profile-main"><view class="profile-avatar"><image wx:if="{{avatarPath}}" src="{{avatarPath}}" mode="aspectFill"/><text wx:else>{{initial}}</text></view>
+    <view class="profile-main"><view class="profile-avatar" bindtap="member" aria-role="button" aria-label="查看我的队员资料"><image wx:if="{{avatarPath}}" src="{{avatarPath}}" mode="aspectFill"/><text wx:else>{{initial}}</text></view>
       <view class="profile-identity"><view class="profile-name">{{player.profile_complete ? player.name : '完善资料'}}</view><view wx:if="{{!player.profile_complete}}" class="profile-status" bindtap="edit">设置昵称后即可报名 <image src="/assets/icons/chevron-dark.svg"/></view></view>
       <button class="edit-link" bindtap="edit"><text>修改</text><image src="/assets/icons/chevron-dark.svg"/></button>
     </view>

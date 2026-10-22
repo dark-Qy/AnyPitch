@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const view = require('../../utils/view');
+const calendar = require('../../utils/calendar');
 
 const { typeChoices: types } = require('../../utils/design');
 const places = [
@@ -19,7 +20,8 @@ Page({
   data: {
     loading: true, error: '', events: [], visible: [], mode: 'current',
     place: 'all', type: 'all', placeLabel: '全部地点', typeLabel: '全部',
-    places, types, filterOpen: false, dropdown: '', draftPlace: 'all', draftType: 'all', draftCount: 0
+    places, types, filterOpen: false, dropdown: '', draftPlace: 'all', draftType: 'all', draftCount: 0,
+    calendarOpen: false, calendarMonth: view.monthNow(), calendarMonthLabel: calendar.monthLabel(view.monthNow()), calendarWeeks: [], weekLabels: calendar.weekLabels, selectedDate: ''
   },
   onShow() { view.selectTab(this, 0); if (view.requireSession()) this.load(); },
   async load() {
@@ -31,7 +33,8 @@ Page({
       if (seq !== this.seq) return;
       this.previewCache = {};
       this.previewErrors = {};
-      this.setData({ events: view.eventRows(result.events, result.attendance_records) });
+      const events = view.eventRows(result.events, result.attendance_records);
+      this.setData({ events });
       this.select();
       await this.loadPreviews(seq);
     } catch (e) { if (seq === this.seq) view.fail(this, e); }
@@ -40,10 +43,11 @@ Page({
   select() {
     const isHistory = this.data.mode === 'history';
     const visible = this.data.events.filter(event =>
-      matches(event, this.data.place, this.data.type) && (isHistory ? event.cancelled || event.ended : !event.cancelled && !event.ended)
+      matches(event, this.data.place, this.data.type) &&
+      (isHistory ? event.cancelled || event.ended : !event.cancelled && !event.ended)
     );
     if (isHistory) visible.reverse();
-    this.setData({ visible: visible.map(event => ({
+    this.setData({ calendarWeeks: calendar.monthWeeks(this.data.calendarMonth, visible, this.data.selectedDate), visible: visible.map(event => ({
       ...event,
       shortTime: view.dateText(event.starts_at),
       attendeeCount: this.previewCache?.[event.id]?.attendeeCount,
@@ -83,10 +87,30 @@ Page({
     }));
   },
   changeMode(e) {
-    this.setData({ mode: e.currentTarget.dataset.value, dropdown: '' });
+    this.setData({ mode: e.currentTarget.dataset.value, dropdown: '', selectedDate: '' });
     this.select();
     this.loadPreviews(this.seq);
   },
+  toggleCalendar() { this.setData({ calendarOpen: !this.data.calendarOpen, dropdown: '' }); },
+  moveMonth(e) {
+    const month = calendar.shiftMonth(this.data.calendarMonth, Number(e.currentTarget.dataset.delta));
+    this.setData({ calendarMonth: month, calendarMonthLabel: calendar.monthLabel(month), selectedDate: '' });
+    this.select();
+  },
+  jumpToday() {
+    const month = view.monthNow();
+    this.setData({ calendarMonth: month, calendarMonthLabel: calendar.monthLabel(month), selectedDate: '' });
+    this.select();
+  },
+  chooseDay(e) {
+    const key = e.currentTarget.dataset.date;
+    const target = this.data.visible.find(event => calendar.dateKey(event.starts_at) === key);
+    this.setData({ selectedDate: key, calendarWeeks: calendar.monthWeeks(this.data.calendarMonth, this.data.visible, key) }, () => {
+      if (target) wx.pageScrollTo({ selector: '#event-' + target.id, duration: 280 });
+      else view.notice('这一天没有符合条件的活动');
+    });
+  },
+  openMember(e) { wx.navigateTo({ url: '/pages/member/index?id=' + encodeURIComponent(e.currentTarget.dataset.id) }); },
   toggleDropdown(e) {
     const kind = e.currentTarget.dataset.kind;
     this.setData({ dropdown: this.data.dropdown === kind ? '' : kind });
@@ -96,7 +120,7 @@ Page({
     const kind = e.currentTarget.dataset.kind;
     const value = e.currentTarget.dataset.value;
     const row = (kind === 'place' ? places : types).find(choice => choice.value === value);
-    this.setData(kind === 'place' ? { place: value, placeLabel: row.label, dropdown: '' } : { type: value, typeLabel: row.label, dropdown: '' });
+    this.setData(kind === 'place' ? { place: value, placeLabel: row.label, dropdown: '', selectedDate: '' } : { type: value, typeLabel: row.label, dropdown: '', selectedDate: '' });
     this.select();
     this.loadPreviews(this.seq);
   },
@@ -123,7 +147,7 @@ Page({
     this.closeFilter();
     const place = this.data.draftPlace;
     const type = this.data.draftType;
-    this.setData({ place, type, placeLabel: places.find(row => row.value === place).label, typeLabel: types.find(row => row.value === type).label, filterOpen: false });
+    this.setData({ place, type, placeLabel: places.find(row => row.value === place).label, typeLabel: types.find(row => row.value === type).label, filterOpen: false, selectedDate: '' });
     this.select();
     this.loadPreviews(this.seq);
   },

@@ -310,6 +310,12 @@ func (s *Service) attendanceCounts(teamID string, startsAt, endsAt time.Time) (m
 	return counts, rows.Err()
 }
 
+// ParticipationCount uses the same training and friendly signup rule as the leaderboard.
+func (s *Service) ParticipationCount(teamID, playerID string) (int, error) {
+	counts, err := s.attendanceCounts(teamID, time.Time{}, time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC))
+	return counts[playerID], err
+}
+
 func (s *Service) term(teamID, id string) (Term, error) {
 	var term Term
 	err := s.db.QueryRow(`SELECT id, name, starts_on, ends_on, created_at, updated_at FROM terms WHERE id = ? AND team_id = ?`, id, teamID).Scan(&term.ID, &term.Name, &term.StartsOn, &term.EndsOn, &term.CreatedAt, &term.UpdatedAt)

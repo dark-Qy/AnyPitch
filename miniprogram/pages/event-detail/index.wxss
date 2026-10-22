@@ -3,4 +3,5 @@
 .detail-type-info{display:flex;align-items:center;gap:16rpx;min-width:0}
 .detail-action-row button.share-event:not([size="mini"]){display:flex;align-items:center;justify-content:center;gap:8rpx;flex:0 0 auto;width:auto;min-height:max(88rpx,44px);margin:0;padding:0 8rpx;border:0;background:transparent;color:var(--primary);font-size:24rpx;font-weight:500;line-height:1.2;white-space:nowrap}
 .share-event image{width:28rpx;height:28rpx;flex-shrink:0}
+.roster-column .member{min-height:44px}.member-chip{min-height:44px}
 .share-canvas{position:fixed;left:-2000px;top:0;width:1402px;height:1122px;opacity:0;pointer-events:none}

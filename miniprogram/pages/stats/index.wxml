@@ -8,7 +8,7 @@
         <picker wx:elif="{{periodIndex < 4}}" mode="date" fields="year" value="{{year}}" bindchange="year"><button>{{year}} 年 <image class="inline-icon down-icon" src="/assets/icons/chevron-dark.svg"/></button></picker>
       </view>
       <view wx:if="{{!loading && leaderboard.entries.length}}" class="podium {{leaderboard.entries.length < 3 ? 'compact-podium' : ''}}">
-        <view class="podium-person rank-{{index+1}}" wx:for="{{leaderboard.entries}}" wx:key="player_id" wx:if="{{index < 3}}">
+        <view class="podium-person rank-{{index+1}}" wx:for="{{leaderboard.entries}}" wx:key="player_id" wx:if="{{index < 3}}" data-id="{{item.player_id}}" bindtap="member" aria-role="button" aria-label="查看{{item.name}}资料">
           <image class="podium-symbol" src="/assets/icons/trophy-dark.svg"/>
           <view class="podium-avatar"><image wx:if="{{item.avatarPath}}" src="{{item.avatarPath}}" mode="aspectFill"/><text wx:else>{{item.initial}}</text></view>
           <view class="podium-name">{{item.name}}</view>
@@ -23,7 +23,7 @@
   <block wx:elif="{{!error}}">
     <view wx:if="{{!leaderboard.entries.length}}" class="quiet-empty">暂无记录</view>
     <view wx:elif="{{leaderboard.entries.length > 3}}" class="ranking-list">
-      <view class="ranking {{item.player_id === playerID ? 'mine' : ''}}" wx:for="{{leaderboard.entries}}" wx:key="player_id" wx:if="{{index >= 3}}">
+      <view class="ranking {{item.player_id === playerID ? 'mine' : ''}}" wx:for="{{leaderboard.entries}}" wx:key="player_id" wx:if="{{index >= 3}}" data-id="{{item.player_id}}" bindtap="member" aria-role="button" aria-label="查看{{item.name}}资料">
         <text class="rank">{{item.rank}}</text><view class="list-avatar"><image wx:if="{{item.avatarPath}}" src="{{item.avatarPath}}" mode="aspectFill"/><text wx:else>{{item.initial}}</text></view><view class="grow player-name">{{item.name}}<text wx:if="{{item.player_id === playerID}}" class="self-label">我</text></view><text class="count">{{item.count}}<text class="small muted"> 次</text></text>
       </view>
     </view>
