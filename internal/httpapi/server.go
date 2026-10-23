@@ -19,6 +19,7 @@ import (
 	"anypitch/internal/db"
 	teamevent "anypitch/internal/event"
 	"anypitch/internal/media"
+	"anypitch/internal/notification"
 	"anypitch/internal/player"
 	"anypitch/internal/specialactivity"
 	"anypitch/internal/stats"
@@ -36,6 +37,7 @@ type Handler struct {
 	media             *media.Service
 	db                *sql.DB
 	safety            *contentsafety.Client
+	notifications     *notification.Service
 	reviewDir         string
 }
 
@@ -58,6 +60,7 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	}
 	handler := &Handler{
 		safety: contentsafety.New(), reviewDir: reviewDir,
+		notifications:     notification.New(conn, os.Getenv("ANYPITCH_WECHAT_NEW_EVENT_TEMPLATE_ID")),
 		auth:              authService,
 		players:           player.NewService(conn),
 		events:            teamevent.NewService(conn),
@@ -89,6 +92,7 @@ func NewHandler(conn *sql.DB) (http.Handler, error) {
 	mux.Handle("/api/player/avatar", handler.withPlayer(handler.playerAvatarUpload))
 	mux.Handle("/api/player/avatars/", handler.withPlayer(handler.playerAvatarImage))
 	mux.Handle("/api/player/members/", handler.withPlayer(handler.playerMemberProfile))
+	mux.Handle("/api/player/notifications", handler.withPlayer(handler.playerNotifications))
 	mux.Handle("/api/coach/members", handler.withAuth(handler.coachMembers))
 	mux.Handle("/api/coach/members/", handler.withAuth(handler.coachMemberDetail))
 	mux.Handle("/api/player/logout", handler.withPlayer(handler.playerLogout))

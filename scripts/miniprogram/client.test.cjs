@@ -32,6 +32,18 @@ test('avatar picker rejects oversized files before upload',async()=>{
   wx.uploadFile=()=>assert.fail('oversized avatar must not upload');
   await page.chooseAvatar();assert.match(page.data.avatarStatus,/6 MB/);
 });
+test('new event reminder saves only an accepted WeChat subscription',async()=>{
+  let page;global.Page=definition=>{page=definition;};delete require.cache[require.resolve('../../miniprogram/pages/mine/index')];require('../../miniprogram/pages/mine/index');
+  page.data={...page.data,player:{id:'member'},notificationTemplateID:'template'};page.setData=change=>Object.assign(page.data,change);
+  const original=api.request;let grants=0;
+  api.request=async(path,method,body)=>{assert.equal(path,'/api/player/notifications');assert.equal(method,'POST');assert.ok(body.request_id);grants++;return {remaining:grants};};
+  wx.requestSubscribeMessage=options=>{assert.deepEqual(options.tmplIds,['template']);options.success({template:'reject'});};
+  try{
+    await page.subscribeNextEvent();assert.equal(grants,0);assert.equal(page.data.notificationStatus,'未授权新活动提醒');
+    wx.requestSubscribeMessage=options=>options.success({template:'accept'});
+    await page.subscribeNextEvent();assert.equal(grants,1);assert.equal(page.data.notificationRemaining,1);assert.equal(wx.getStorageSync('anypitch_notice_pending_grant'),undefined);
+  }finally{api.request=original;}
+});
 test('event invitation uses the selected event and returns to it after login',async()=>{
   const share=require('../../miniprogram/utils/share');
   assert.equal(share.eventPath('event one'),'/pages/event-detail/index?id=event%20one');

@@ -4,12 +4,51 @@ const { eventDesign } = require('../../utils/design');
 const share = require('../../utils/share');
 const AVATAR_REVIEW_KEY = 'anypitch_avatar_review';
 const AVATAR_MAX_BYTES = 6 * 1024 * 1024;
+const NOTICE_PENDING_KEY = 'anypitch_notice_pending_grant';
 function setTabBarHidden(page, hidden) { const tabBar = page.getTabBar && page.getTabBar(); if (tabBar) tabBar.setData({ hidden }); }
 
 Page({
  onReady() { getApp().initTitleFont(); },
-  data: { loading: true, saving: false, editing: false, uploadingAvatar: false, avatarStatus: '', error: '', player: {}, initial: '我', avatarPath: '', history: [], recentHistory: [], participationCount: 0 },
-  async onShow() { this.avatarReviewActive = true; view.selectTab(this, 3); if (!view.requireSession()) return; await this.load(); this.resumeAvatarReview(); if (getApp().globalData.editProfileOnShow) { getApp().globalData.editProfileOnShow = false; this.edit(); } },
+  data: { loading: true, saving: false, editing: false, uploadingAvatar: false, avatarStatus: '', notificationBusy: false, notificationReady: false, notificationRemaining: 0, notificationTemplateID: '', notificationHint: '暂未开放', notificationStatus: '', error: '', player: {}, initial: '我', avatarPath: '', history: [], recentHistory: [], participationCount: 0 },
+  async onShow() { this.avatarReviewActive = true; view.selectTab(this, 3); if (!view.requireSession()) return; await this.load(); this.refreshNotifications(); this.resumeAvatarReview(); if (getApp().globalData.editProfileOnShow) { getApp().globalData.editProfileOnShow = false; this.edit(); } },
+  async refreshNotifications() {
+    const pending = wx.getStorageSync(NOTICE_PENDING_KEY);
+    if (pending && pending.playerID === this.data.player.id) {
+      try {
+        await api.request('/api/player/notifications', 'POST', { request_id: pending.requestID });
+        wx.removeStorageSync(NOTICE_PENDING_KEY);
+      } catch (error) {
+        this.setData({ notificationStatus: '微信已授权，但同步未完成，重新打开页面后会再试' });
+      }
+    }
+    try {
+      const state = await api.request('/api/player/notifications');
+      this.setData({ notificationReady: true, notificationTemplateID: state.template_id, notificationRemaining: state.remaining, notificationHint: state.remaining > 0 ? `还可接收 ${state.remaining} 条` : '订阅下一条活动' });
+    } catch (_) {
+      this.setData({ notificationReady: false, notificationTemplateID: '', notificationHint: '暂未开放' });
+    }
+  },
+  async subscribeNextEvent() {
+    if (this.data.notificationBusy || !this.data.notificationTemplateID) return;
+    const templateID = this.data.notificationTemplateID;
+    this.setData({ notificationBusy: true, notificationStatus: '' });
+    try {
+      const result = await new Promise((resolve, reject) => wx.requestSubscribeMessage({ tmplIds: [templateID], success: resolve, fail: reject }));
+      if (result[templateID] !== 'accept') {
+        this.setData({ notificationStatus: result[templateID] === 'ban' ? '微信已限制此类提醒，请检查小程序通知设置' : '未授权新活动提醒' });
+        return;
+      }
+      const requestID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      wx.setStorageSync(NOTICE_PENDING_KEY, { playerID: this.data.player.id, requestID });
+      const state = await api.request('/api/player/notifications', 'POST', { request_id: requestID });
+      wx.removeStorageSync(NOTICE_PENDING_KEY);
+      this.setData({ notificationRemaining: state.remaining, notificationHint: `还可接收 ${state.remaining} 条`, notificationStatus: '已订阅下一条新活动提醒' });
+    } catch (error) {
+      this.setData({ notificationStatus: wx.getStorageSync(NOTICE_PENDING_KEY) ? '微信已授权，但同步未完成，重新打开页面后会再试' : (error.errMsg || error.message || '订阅失败，请重试') });
+    } finally {
+      this.setData({ notificationBusy: false });
+    }
+  },
   async load() {
     this.setData({ loading: true, error: '' });
     try {

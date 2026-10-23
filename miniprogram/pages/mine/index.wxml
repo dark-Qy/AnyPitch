@@ -12,7 +12,9 @@
       <button class="menu-item" bindtap="topics"><view class="menu-icon-box"><image src="/assets/icons/trophy-dark.svg"/></view><text class="grow">赛事专题</text><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
       <button class="menu-item" bindtap="settings"><view class="menu-icon-box"><image src="/assets/icons/settings-dark.svg"/></view><text class="grow">设置</text><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
       <button class="menu-item" open-type="share"><view class="menu-icon-box"><image src="/assets/icons/invite-dark.svg"/></view><text class="grow">邀请队友</text><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
+      <button class="menu-item" bindtap="subscribeNextEvent" disabled="{{notificationBusy || !notificationReady}}"><view class="menu-icon-box"><image src="/assets/icons/bell-dark.svg"/></view><view class="notification-copy grow"><text>新活动提醒</text><text class="notification-subtitle">{{notificationHint}}</text></view><image class="menu-chevron" src="/assets/icons/chevron-dark.svg"/></button>
     </view>
+    <view wx:if="{{notificationStatus}}" class="notification-status">{{notificationStatus}}</view>
     <view class="mine-activity">
       <view class="section-heading"><text>我的活动</text><button class="text-button" bindtap="events">全部 <image src="/assets/icons/chevron-dark.svg"/></button></view>
       <view wx:if="{{loading}}" class="loading">加载中…</view>

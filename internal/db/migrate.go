@@ -81,6 +81,36 @@ func Migrate(conn *sql.DB) error {
 			updated_at TEXT NOT NULL,
 			PRIMARY KEY (event_id, player_id)
 		)`,
+		`CREATE TABLE IF NOT EXISTS event_notice_grants (
+			player_id TEXT PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+			remaining INTEGER NOT NULL DEFAULT 0 CHECK (remaining >= 0),
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS event_notice_authorizations (
+			player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+			request_id TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (player_id, request_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS event_notice_deliveries (
+			event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+			player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+			status TEXT NOT NULL CHECK (status IN ('pending','sending','sent','failed','unknown','skipped')),
+			error_code INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (event_id, player_id)
+		)`,
+		`CREATE TRIGGER IF NOT EXISTS event_notice_enqueue AFTER INSERT ON events BEGIN
+			INSERT INTO event_notice_deliveries(event_id,player_id,status,created_at,updated_at)
+			SELECT NEW.id,p.id,'pending',NEW.created_at,NEW.created_at
+			FROM event_notice_grants g
+			JOIN players p ON p.id=g.player_id AND p.team_id=NEW.team_id AND p.status='active'
+			JOIN wechat_members m ON m.player_id=p.id
+			WHERE g.remaining>0;
+			UPDATE event_notice_grants SET remaining=remaining-1,updated_at=NEW.created_at
+			WHERE player_id IN (SELECT player_id FROM event_notice_deliveries WHERE event_id=NEW.id);
+		END`,
 		`CREATE TABLE IF NOT EXISTS tactic_boards (
 			id TEXT PRIMARY KEY,
 			team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,

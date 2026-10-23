@@ -176,6 +176,23 @@ func TestNewWeChatMemberCanBrowseBeforeCompletingProfile(t *testing.T) {
 	assertJSONEquals(t, joined, "data.record.status", "available")
 }
 
+func TestPlayerCanRecordOneTimeNewEventReminderAuthorization(t *testing.T) {
+	t.Setenv("ANYPITCH_WECHAT_NEW_EVENT_TEMPLATE_ID", "template")
+	handler := newTestHandler(t)
+	login := performJSONRequest(t, handler, http.MethodPost, "/api/auth/wechat", "", map[string]any{"code": "notice-member"})
+	assertStatus(t, login, http.StatusOK)
+	token := jsonPath(t, login, "data.token").(string)
+	state := performJSONRequest(t, handler, http.MethodGet, "/api/player/notifications", token, nil)
+	assertStatus(t, state, http.StatusOK)
+	assertJSONEquals(t, state, "data.template_id", "template")
+	assertJSONEquals(t, state, "data.remaining", float64(0))
+	for i := 0; i < 2; i++ {
+		grant := performJSONRequest(t, handler, http.MethodPost, "/api/player/notifications", token, map[string]any{"request_id": "accepted-once"})
+		assertStatus(t, grant, http.StatusOK)
+		assertJSONEquals(t, grant, "data.remaining", float64(1))
+	}
+}
+
 func TestWeChatMemberOnlyManagesOwnAttendance(t *testing.T) {
 	handler := newTestHandler(t)
 

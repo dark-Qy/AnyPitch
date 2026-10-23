@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"anypitch/internal/httpapi"
+	"anypitch/internal/notification"
 )
 
 func main() {
@@ -27,6 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create handler: %v", err)
 	}
+	go notification.New(conn, os.Getenv("ANYPITCH_WECHAT_NEW_EVENT_TEMPLATE_ID")).Run(context.Background())
 
 	addr := envOrDefault("HTTP_ADDR", "127.0.0.1:8080")
 	log.Printf("AnyPitch listening on http://%s", addr)
